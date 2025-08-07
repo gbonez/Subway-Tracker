@@ -113,13 +113,12 @@ def delete_ride(ride_id: int):
 @app.delete("/rides/")
 def clear_all_rides(db: Session = Depends(get_db)):
     try:
-        db.execute(text("DROP TABLE IF EXISTS rides CASCADE"))
+        db.execute(text("TRUNCATE TABLE rides RESTART IDENTITY CASCADE"))
         db.commit()
-        Base.metadata.create_all(bind=engine)
-        return {"message": "Rides table dropped and recreated with updated schema."}
+        return {"message": "All rides cleared from the table."}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error resetting table: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error clearing rides table: {str(e)}")
 
 @app.get("/rides/export")
 def export_rides_csv(db: Session = Depends(get_db)):

@@ -198,12 +198,21 @@
       paginatedRides.forEach(ride => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${ride. ride_number}</td>
+          <td>${ride.ride_number}</td>
           <td>${ride.line}</td>
           <td>${ride.board_stop}</td>
           <td>${ride.depart_stop}</td>
           <td>${ride.date}</td>
-          <td>${ride.transferred ? "Yes" : "No"}</td>`;
+          <td>${ride.transferred ? "Yes" : "No"}</td>
+          <td>
+            <button 
+              data-id="${ride.id}" 
+              onclick="deleteRide(this)" 
+              title="Delete ride" 
+              style="background:none;border:none;cursor:pointer;"
+            >🗑️</button>
+          </td>`;
+
         tableBody.appendChild(row);
       });
   
@@ -226,6 +235,25 @@
         container.appendChild(btn);
       }
     }
+
+    async function deleteRide(rideNumber) {
+      if (confirm(`Delete ride #${rideNumber}?`)) {
+        try {
+          const res = await fetch(`${backendUrl}/rides/${rideNumber}`, {
+            method: "DELETE"
+          });
+          if (res.ok) {
+            fetchRides();
+          } else {
+            alert(`Failed to delete ride #${rideNumber}`);
+          }
+        } catch (err) {
+          console.error(`Error deleting ride #${rideNumber}:`, err);
+          alert("Error deleting ride.");
+        }
+      }
+    }
+
   
     async function clearDatabase() {
       if (confirm("Are you sure you want to delete all rides?")) {
