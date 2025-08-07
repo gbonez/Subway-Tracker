@@ -59,9 +59,7 @@
     <input type="checkbox" id="transferred" />
     Did you transfer to another line at your departure stop?
   </label><br>
-
-  <button onclick="submitRide()">Submit Ride</button>
-
+  <button id="submitButton" onclick="submitRide()">Submit Ride</button>
   <div id="message"></div>
   <hr />
   <div id="loading" style="display: none; font-weight: bold; margin-top: 1em;">Loading rides...</div>
@@ -74,8 +72,8 @@
         <option value="all">All</option>
       </select>
       <button onclick="fetchRides()">Refresh Table</button>
-      <button onclick="exportCSV()">Export CSV</button>
       <button onclick="clearDatabase()">Clear Table</button>
+      <button onclick="exportCSV()">Export Table</button>
     </div>
     <table id="ridesTable" border="1" style="margin-top: 1em;">
       <thead>
@@ -134,6 +132,10 @@
     });
 
     async function submitRide() {
+      const submitBtn = document.getElementById("submitButton");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting...";
+
       const line = lineSelect.value;
       const boardStop = boardStopSelect.value;
       const departStop = departStopSelect.value;
@@ -142,6 +144,8 @@
 
       if (!line || !boardStop || !departStop || !rideDateInput) {
         alert("Please fill in all fields.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Ride";
         return;
       }
 
@@ -166,15 +170,19 @@
 
         if (res.ok) {
           messageDiv.textContent = "New ride successfully recorded!";
-          fetchRides();
+          await fetchRides();  // wait for table update before enabling
         } else {
           messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
         }
       } catch (err) {
         console.error(err);
         messageDiv.textContent = `Error submitting ride: ${err.message}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Ride";
       }
     }
+
   
     async function fetchRides() {
       const loadingIndicator = document.getElementById("loading");
@@ -238,44 +246,44 @@
       const totalPages = Math.ceil(allRides.length / entriesPerPage);
       const container = document.getElementById("paginationControls");
       container.innerHTML = "";
-  
-      for (let i = 1; i <= totalPages; i++) {
+
+      if (totalPages <= 1) return;
+
+      const makeButton = (label, onClick, disabled = false) => {
         const btn = document.createElement("button");
-        btn.textContent = i;
-        btn.disabled = i === currentPage;
-        btn.onclick = () => {
-          currentPage = i;
-          renderTable();
-        };
-        container.appendChild(btn);
-      }
+        btn.textContent = label;
+        btn.style.margin = "0 4px";
+        btn.disabled = disabled;
+        btn.onclick = onClick;
+        return btn;
+      };
+
+      container.appendChild(makeButton("⏮ First", () => {
+        currentPage = 1;
+        renderTable();
+      }, currentPage === 1));
+
+      container.appendChild(makeButton("◀ Prev", () => {
+        currentPage--;
+        renderTable();
+      }, currentPage === 1));
+
+      const pageDisplay = document.createElement("span");
+      pageDisplay.textContent = ` Page ${currentPage} of ${totalPages} `;
+      pageDisplay.style.margin = "0 8px";
+      container.appendChild(pageDisplay);
+
+      container.appendChild(makeButton("Next ▶", () => {
+        currentPage++;
+        renderTable();
+      }, currentPage === totalPages));
+
+      container.appendChild(makeButton("Last ⏭", () => {
+        currentPage = totalPages;
+        renderTable();
+      }, currentPage === totalPages));
     }
 
-    async function deleteRide(buttonElement) {
-      const rideId = buttonElement.getAttribute("data-id");
-      const rideNumber = buttonElement.getAttribute("data-ride-number");
-      if (!rideNumber) {
-        alert("Invalid ride ID");
-        return;
-      }
-
-      if (confirm(`Delete ride #${rideNumber}?`)) {
-        try {
-          const res = await fetch(`${backendUrl}/rides/${rideId}`, {
-            method: "DELETE"
-          });
-
-          if (res.ok) {
-            fetchRides();
-          } else {
-            alert(`Failed to delete ride #${rideNumber}`);
-          }
-        } catch (err) {
-          console.error("Error deleting ride:", err);
-          alert(`Error deleting ride #${rideNumber}`);
-        }
-      }
-    }
 
 
   

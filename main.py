@@ -99,6 +99,29 @@ def get_all_rides():
     rides = db.query(SubwayRide).all()
     return rides
 
+@app.get("/rides/export")
+def export_rides_csv(db: Session = Depends(get_db)):
+    rides = db.query(SubwayRide).all()
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "ride_number", "line", "board_stop", "depart_stop", "date", "transferred"])
+    for ride in rides:
+        writer.writerow([
+            ride.id,
+            ride.ride_number,
+            ride.line,
+            ride.board_stop,
+            ride.depart_stop,
+            ride.date,
+            ride.transferred
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=rides.csv"}
+    )
+
 
 @app.get("/rides/{ride_id}")
 def get_ride(ride_id: int):
@@ -133,28 +156,3 @@ def clear_all_rides(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error clearing rides: {str(e)}")
-
-
-
-@app.get("/rides/export")
-def export_rides_csv(db: Session = Depends(get_db)):
-    rides = db.query(SubwayRide).all()
-    output = StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["id", "ride_number", "line", "board_stop", "depart_stop", "date", "transferred"])
-    for ride in rides:
-        writer.writerow([
-            ride.id,
-            ride.ride_number,
-            ride.line,
-            ride.board_stop,
-            ride.depart_stop,
-            ride.date,
-            ride.transferred
-        ])
-    output.seek(0)
-    return StreamingResponse(
-        output,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=rides.csv"}
-    )
