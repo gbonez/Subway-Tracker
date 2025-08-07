@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from datetime import date
-from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from io import StringIO
@@ -106,9 +106,13 @@ def delete_ride(ride_id: int):
 
 @app.delete("/rides/")
 def clear_all_rides(db: Session = Depends(get_db)):
-    db.query(SubwayRide).delete()
-    db.commit()
-    return {"message": "All rides deleted."}
+    try:
+        db.execute(text("DROP TABLE IF EXISTS rides CASCADE"))
+        db.commit()
+        return {"message": "Rides table dropped successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error dropping table: {str(e)}")
 
 @app.get("/rides/export")
 def export_rides_csv(db: Session = Depends(get_db)):
