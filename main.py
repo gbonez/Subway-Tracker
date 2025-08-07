@@ -1,12 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from datetime import date
+from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-
+from sqlalchemy.orm import sessionmaker, Session
+from io import StringIO
+import csv
 import os
+
 # -------------------------------
 # DATABASE setup
 # -------------------------------
@@ -22,6 +25,13 @@ Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine)
 db = SessionLocal()
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 class SubwayRide(Base):
     __tablename__ = "rides"
 
@@ -29,7 +39,7 @@ class SubwayRide(Base):
     line = Column(String, nullable=False)
     board_stop = Column(String, nullable=False)
     depart_stop = Column(String, nullable=False)
-    date = Column(DateTime, default=datetime.utcnow)
+    date = Column(Date, nullable=False)
     transferred = Column(Boolean, default=False)
 
 Base.metadata.create_all(bind=engine)
@@ -51,7 +61,7 @@ class RideCreate(BaseModel):
     line: str
     board_stop: str
     depart_stop: str
-    date: datetime = None
+    date: date
     transferred: bool = False
 
 # -------------------------------
@@ -59,7 +69,7 @@ class RideCreate(BaseModel):
 # -------------------------------
 @app.post("/rides/")
 def create_ride(ride: RideCreate):
-    ride_date = ride.date or datetime.utcnow()
+    ride_date = ride.date
     new_ride = SubwayRide(
         line=ride.line,
         board_stop=ride.board_stop,
@@ -94,10 +104,21 @@ def delete_ride(ride_id: int):
     db.commit()
     return {"message": f"Ride with ID {ride_id} deleted successfully"}
 
-
 @app.delete("/rides/")
-def delete_all_rides():
-    deleted = db.query(SubwayRide).delete()
+def clear_all_rides(db: Session = Depends(get_db)):
+    db.query(SubwayRide).delete()
     db.commit()
-    return {"message": f"Deleted {deleted} rides from the database"}
+    return {"message": "All rides deleted."}
+
+@app.get("/rides/export")
+def export_rides_csv(db: Session = Depends(get_db)):
+    rides = db.query(SubwayRide).all()
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "line", "board_stop", "depart_stop", "date", "transferred"])
+    for ride in rides:
+        writer.writerow([ride.id, ride.line, ride.board_stop, ride.depart_stop, ride.date, ride.transferred])
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=rides.csv"})
+
 

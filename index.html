@@ -6,8 +6,31 @@
   <title>NYC Subway Ride Tracker</title>
   <style>
     body { font-family: sans-serif; margin: 2em; }
-    select, button { margin: 0.5em 0; padding: 0.5em; width: 100%; max-width: 300px; }
+    select, button, input[type="date"] {
+      margin: 0.5em 0;
+      padding: 0.5em;
+      width: 100%;
+      max-width: 300px;
+    }
     #message { margin-top: 1em; color: green; }
+
+    table {
+      margin-top: 2em;
+      border-collapse: collapse;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+
   </style>
   <script src="stopsByLine.js"></script> 
 </head>
@@ -15,108 +38,214 @@
   <h1>Record a Subway Ride</h1>
 
   <label for="line">Line:</label>
-   <select id="line">
-  <option value="">Select a line</option>
-  </select>
-  <br></br>
+  <select id="line">
+    <option value="">Select a line</option>
+  </select><br>
+
   <label for="boardStop">Boarding Stop:</label>
   <select id="boardStop">
     <option value="">Select boarding stop</option>
-  </select>
-  <br></br>
+  </select><br>
+
   <label for="departStop">Departing Stop:</label>
   <select id="departStop">
     <option value="">Select departing stop</option>
-  </select>
-  <br></br>
+  </select><br>
+
   <label for="rideDate">Date:</label>
-  <input type="date" id="rideDate" />
-  <br></br>
+  <input type="date" id="rideDate" /><br>
+
   <label for="transferred">
     <input type="checkbox" id="transferred" />
     Did you transfer to another line at your departure stop?
-  </label>
-  <br></br>
-  
+  </label><br>
 
   <button onclick="submitRide()">Submit Ride</button>
 
   <div id="message"></div>
-
+  <hr />
+  <div>
+    <label for="entriesPerPage">Show entries:</label>
+      <select id="entriesPerPage" onchange="changeEntriesPerPage()">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="all">All</option>
+      </select>
+      <button onclick="exportCSV()">Export CSV</button>
+      <button onclick="clearDatabase()">Clear Table</button>
+    </div>
+    <table id="ridesTable" border="1" style="margin-top: 1em;">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Line</th>
+          <th>Boarding Stop</th>
+          <th>Departing Stop</th>
+          <th>Date</th>
+          <th>Transferred</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  <div id="paginationControls" style="margin-top: 1em;"></div>
 
   <script>
+    const backendUrl = `https://subway-tracker-production.up.railway.app`;
+
     const lineSelect = document.getElementById("line");
     const boardStopSelect = document.getElementById("boardStop");
     const departStopSelect = document.getElementById("departStop");
     const messageDiv = document.getElementById("message");
-    const transferredSelect = document.getElementById("transferred").checked;
+    const ridesTableBody = document.querySelector("#ridesTable tbody");
+
+    let allRides = [];
+    let currentPage = 1;
+    let entriesPerPage = 25;
 
     window.addEventListener("DOMContentLoaded", () => {
-        const lines = Object.keys(stopsByLine).sort();
-        lines.forEach(line => {
+      const lines = Object.keys(stopsByLine).sort();
+      lines.forEach(line => {
         const opt = document.createElement("option");
         opt.value = line;
         opt.textContent = line;
         lineSelect.appendChild(opt);
-        });
+      });
+
+      fetchRides();
     });
 
     lineSelect.addEventListener("change", () => {
-        const line = lineSelect.value;
-        const stops = stopsByLine[line] || [];
+      const line = lineSelect.value;
+      const stops = stopsByLine[line] || [];
 
-        [boardStopSelect, departStopSelect].forEach(select => {
+      [boardStopSelect, departStopSelect].forEach(select => {
         select.innerHTML = "<option value=''>Select stop</option>";
         stops.forEach(stop => {
-            const opt = document.createElement("option");
-            opt.value = stop;
-            opt.textContent = stop;
-            select.appendChild(opt);
+          const opt = document.createElement("option");
+          opt.value = stop;
+          opt.textContent = stop;
+          select.appendChild(opt);
         });
-        });
+      });
     });
 
-
     async function submitRide() {
-        const line = lineSelect.value;
-        const boardStop = boardStopSelect.value;
-        const departStop = departStopSelect.value;
-        const rideDateInput = document.getElementById("rideDate").value;
+      const line = lineSelect.value;
+      const boardStop = boardStopSelect.value;
+      const departStop = departStopSelect.value;
+      const rideDateInput = document.getElementById("rideDate").value;
+      const transferred = document.getElementById("transferred").checked;
 
-        if (!line || !boardStop || !departStop || !rideDateInput) {
-            alert("Please fill in all fields.");
-            return;
+      if (!line || !boardStop || !departStop || !rideDateInput) {
+        alert("Please fill in all fields.");
+        return;
+      }
+
+      const data = {
+        line,
+        board_stop: boardStop,
+        depart_stop: departStop,
+        date: rideDateInput,
+        transferred
+      };
+
+      try {
+        const res = await fetch(`${backendUrl}/rides/`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+          messageDiv.textContent = "Ride recorded! Ride ID: " + result.ride_id;
+          fetchRides(); // Refresh the table
+        } else {
+          messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
         }
-
-        const data = {
-            line: line,
-            board_stop: boardStop,
-            depart_stop: departStop,
-            date: rideDateInput,
-            transferred: transferredSelect
+      } catch (err) {
+        console.error(err);
+        messageDiv.textContent = `Error submitting ride: ${err.message}`;
+      }
+    }
+  
+    async function fetchRides() {
+      const res = await fetch(`https://subway-tracker-production.up.railway.app/rides/`);
+      const data = await res.json();
+      allRides = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      renderTable();
+    }
+  
+    function changeEntriesPerPage() {
+      const value = document.getElementById("entriesPerPage").value;
+      entriesPerPage = value === "all" ? allRides.length : parseInt(value);
+      currentPage = 1;
+      renderTable();
+    }
+  
+    function renderTable() {
+      const tableBody = document.querySelector("#ridesTable tbody");
+      tableBody.innerHTML = "";
+  
+      const start = (currentPage - 1) * entriesPerPage;
+      const end = start + entriesPerPage;
+      const paginatedRides = allRides.slice(start, end);
+  
+      paginatedRides.forEach(ride => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${ride.id}</td>
+          <td>${ride.line}</td>
+          <td>${ride.board_stop}</td>
+          <td>${ride.depart_stop}</td>
+          <td>${ride.date}</td>
+          <td>${ride.transferred ? "Yes" : "No"}</td>`;
+        tableBody.appendChild(row);
+      });
+  
+      renderPaginationControls();
+    }
+  
+    function renderPaginationControls() {
+      const totalPages = Math.ceil(allRides.length / entriesPerPage);
+      const container = document.getElementById("paginationControls");
+      container.innerHTML = "";
+  
+      for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement("button");
+        btn.textContent = i;
+        btn.disabled = i === currentPage;
+        btn.onclick = () => {
+          currentPage = i;
+          renderTable();
         };
-
+        container.appendChild(btn);
+      }
+    }
+  
+    async function clearDatabase() {
+      if (confirm("Are you sure you want to delete all rides?")) {
         try {
-            const backendUrl = `https://subway-tracker-production.up.railway.app`;
-            const res = await fetch(`${backendUrl}/rides/`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(data)
-            });
-
-            const result = await res.json();
-
-            if (res.ok) {
-              messageDiv.textContent = "Ride recorded! Ride ID: " + result.ride_id;
-              } else {
-              messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
-              }
-        } catch (err) {
-            console.error(err);
-            messageDiv.textContent = `Error submitting ride: ${err.message}`;
+          const res = await fetch(`${backendUrl}/rides/`, { method: "DELETE" });
+          if (res.ok) {
+            await fetchRides();
+          } else {
+            alert("Failed to clear database.");
           }
+        } catch (err) {
+          console.error("Error clearing DB:", err);
+          alert("Error clearing database.");
+        }
+      }
+    }
+
+  
+    function exportCSV() {
+      window.location.href = "https://subway-tracker-production.up.railway.app/rides/export";
     }
   </script>
 </body>
