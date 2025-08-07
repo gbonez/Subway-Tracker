@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+databases
+asyncpg
+
+
+  git config --global user.email "you@example.com"
+  git config --global user.name "Your Name"
