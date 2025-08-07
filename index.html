@@ -64,6 +64,7 @@
 
   <div id="message"></div>
   <hr />
+  <div id="loading" style="display: none; font-weight: bold; margin-top: 1em;">Loading rides...</div>
   <div>
     <label for="entriesPerPage">Show entries:</label>
       <select id="entriesPerPage" onchange="changeEntriesPerPage()">
@@ -164,7 +165,7 @@
         const result = await res.json();
 
         if (res.ok) {
-          messageDiv.textContent = "Ride recorded! Ride #: " + result.ride_number;
+          messageDiv.textContent = "New ride successfully recorded!";
           fetchRides();
         } else {
           messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
@@ -176,11 +177,22 @@
     }
   
     async function fetchRides() {
-      const res = await fetch(`https://subway-tracker-production.up.railway.app/rides/`);
-      const data = await res.json();
-      allRides = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-      renderTable();
+      const loadingIndicator = document.getElementById("loading");
+      loadingIndicator.style.display = "block";
+      try {
+        const res = await fetch(`${backendUrl}/rides/`);
+        if (!res.ok) throw new Error("Failed to fetch rides");
+        const data = await res.json();
+        allRides = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+      } catch (err) {
+        allRides = [];
+        console.warn("No rides found or error occurred:", err);
+      } finally {
+        loadingIndicator.style.display = "none";
+        renderTable();
+      }
     }
+
   
     function changeEntriesPerPage() {
       const value = document.getElementById("entriesPerPage").value;
@@ -208,7 +220,8 @@
           <td>${ride.transferred ? "Yes" : "No"}</td>
           <td>
             <button 
-              data-id="${ride.id}" 
+              data-id="${ride.id}"
+              data-ride-number="${ride.ride_number}"
               onclick="deleteRide(this)" 
               title="Delete ride" 
               style="background:none;border:none;cursor:pointer;"
@@ -240,12 +253,13 @@
 
     async function deleteRide(buttonElement) {
       const rideId = buttonElement.getAttribute("data-id");
-      if (!rideId) {
+      const rideNumber = buttonElement.getAttribute("data-ride-number");
+      if (!rideNumber) {
         alert("Invalid ride ID");
         return;
       }
 
-      if (confirm(`Delete ride #${rideId}?`)) {
+      if (confirm(`Delete ride #${rideNumber}?`)) {
         try {
           const res = await fetch(`${backendUrl}/rides/${rideId}`, {
             method: "DELETE"
@@ -254,11 +268,11 @@
           if (res.ok) {
             fetchRides();
           } else {
-            alert(`Failed to delete ride #${rideId}`);
+            alert(`Failed to delete ride #${rideNumber}`);
           }
         } catch (err) {
           console.error("Error deleting ride:", err);
-          alert(`Error deleting ride #${rideId}`);
+          alert(`Error deleting ride #${rideNumber}`);
         }
       }
     }

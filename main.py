@@ -90,9 +90,8 @@ def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
 @app.get("/rides/")
 def get_all_rides():
     rides = db.query(SubwayRide).all()
-    if not rides:
-        raise HTTPException(status_code=404, detail="No rides were found")
     return rides
+
 
 @app.get("/rides/{ride_id}")
 def get_ride(ride_id: int):
