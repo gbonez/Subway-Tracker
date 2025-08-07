@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NYC Subway Ride Tracker</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    select, button { margin: 0.5em 0; padding: 0.5em; width: 100%; max-width: 300px; }
+    #message { margin-top: 1em; color: green; }
+  </style>
+  <script src="stopsByLine.js"></script> 
+</head>
+<body>
+  <h1>Record a Subway Ride</h1>
+
+  <label for="line">Line:</label>
+   <select id="line">
+  <option value="">Select a line</option>
+  </select>
+  <br></br>
+  <label for="boardStop">Boarding Stop:</label>
+  <select id="boardStop">
+    <option value="">Select boarding stop</option>
+  </select>
+  <br></br>
+  <label for="departStop">Departing Stop:</label>
+  <select id="departStop">
+    <option value="">Select departing stop</option>
+  </select>
+  <br></br>
+  <label for="rideDate">Date:</label>
+  <input type="date" id="rideDate" />
+  <br></br>
+  <label for="transferred">
+    <input type="checkbox" id="transferred" />
+    Did you transfer to another line at your departure stop?
+  </label>
+  <br></br>
+  
+
+  <button onclick="submitRide()">Submit Ride</button>
+
+  <div id="message"></div>
+
+
+  <script>
+    const lineSelect = document.getElementById("line");
+    const boardStopSelect = document.getElementById("boardStop");
+    const departStopSelect = document.getElementById("departStop");
+    const messageDiv = document.getElementById("message");
+    const transferredSelect = document.getElementById("transferred").checked;
+
+    window.addEventListener("DOMContentLoaded", () => {
+        const lines = Object.keys(stopsByLine).sort();
+        lines.forEach(line => {
+        const opt = document.createElement("option");
+        opt.value = line;
+        opt.textContent = line;
+        lineSelect.appendChild(opt);
+        });
+    });
+
+    lineSelect.addEventListener("change", () => {
+        const line = lineSelect.value;
+        const stops = stopsByLine[line] || [];
+
+        [boardStopSelect, departStopSelect].forEach(select => {
+        select.innerHTML = "<option value=''>Select stop</option>";
+        stops.forEach(stop => {
+            const opt = document.createElement("option");
+            opt.value = stop;
+            opt.textContent = stop;
+            select.appendChild(opt);
+        });
+        });
+    });
+
+
+    async function submitRide() {
+        const line = lineSelect.value;
+        const boardStop = boardStopSelect.value;
+        const departStop = departStopSelect.value;
+        const rideDateInput = document.getElementById("rideDate").value;
+
+        if (!line || !boardStop || !departStop || !rideDateInput) {
+            alert("Please fill in all fields.");
+            return;
+        }
+
+        const data = {
+            line: line,
+            board_stop: boardStop,
+            depart_stop: departStop,
+            date: rideDateInput,
+            transferred: transferredSelect
+        };
+
+        try {
+            const hostname = window.location.hostname;
+            const backendUrl = `http://${hostname}:8000`;
+            const res = await fetch(`${backendUrl}/rides/`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+            });
+
+            const result = await res.json();
+
+            if (res.ok) {
+              messageDiv.textContent = "Ride recorded! Ride ID: " + result.ride_id;
+              } else {
+              messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
+              }
+        } catch (err) {
+            console.error(err);
+            messageDiv.textContent = `Error submitting ride: ${err.message}`;
+          }
+    }
+  </script>
+</body>
+</html>
