@@ -36,6 +36,7 @@ class SubwayRide(Base):
     __tablename__ = "rides"
 
     id = Column(Integer, primary_key=True, index=True)
+    ride_number = Column(Integer, nullable=False)
     line = Column(String, nullable=False)
     board_stop = Column(String, nullable=False)
     depart_stop = Column(String, nullable=False)
@@ -68,9 +69,13 @@ class RideCreate(BaseModel):
 # API Routes
 # -------------------------------
 @app.post("/rides/")
-def create_ride(ride: RideCreate):
+def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
+    total_rides = db.query(SubwayRide).count()
+    next_ride_number = total_rides + 1
+
     ride_date = ride.date
     new_ride = SubwayRide(
+        ride_number=next_ride_number,
         line=ride.line,
         board_stop=ride.board_stop,
         depart_stop=ride.depart_stop,
@@ -80,7 +85,8 @@ def create_ride(ride: RideCreate):
     db.add(new_ride)
     db.commit()
     db.refresh(new_ride)
-    return {"message": "Ride recorded!", "ride_id": new_ride.id}
+    return {"message": "Ride recorded!", "ride_id": new_ride.id, "ride_number": new_ride.ride_number}
+
 
 @app.get("/rides/")
 def get_all_rides():
@@ -109,20 +115,31 @@ def clear_all_rides(db: Session = Depends(get_db)):
     try:
         db.execute(text("DROP TABLE IF EXISTS rides CASCADE"))
         db.commit()
-        return {"message": "Rides table dropped successfully."}
+        Base.metadata.create_all(bind=engine)
+        return {"message": "Rides table dropped and recreated with updated schema."}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error dropping table: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error resetting table: {str(e)}")
 
 @app.get("/rides/export")
 def export_rides_csv(db: Session = Depends(get_db)):
     rides = db.query(SubwayRide).all()
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["id", "line", "board_stop", "depart_stop", "date", "transferred"])
+    writer.writerow(["id", "ride_number", "line", "board_stop", "depart_stop", "date", "transferred"])
     for ride in rides:
-        writer.writerow([ride.id, ride.line, ride.board_stop, ride.depart_stop, ride.date, ride.transferred])
+        writer.writerow([
+            ride.id,
+            ride.ride_number,
+            ride.line,
+            ride.board_stop,
+            ride.depart_stop,
+            ride.date,
+            ride.transferred
+        ])
     output.seek(0)
-    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=rides.csv"})
-
-
+    return StreamingResponse(
+        output,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=rides.csv"}
+    )

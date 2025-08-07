@@ -78,7 +78,7 @@
     <table id="ridesTable" border="1" style="margin-top: 1em;">
       <thead>
         <tr>
-          <th>ID</th>
+          <th>Ride #</th>
           <th>Line</th>
           <th>Boarding Stop</th>
           <th>Departing Stop</th>
@@ -162,8 +162,8 @@
         const result = await res.json();
 
         if (res.ok) {
-          messageDiv.textContent = "Ride recorded! Ride ID: " + result.ride_id;
-          fetchRides(); // Refresh the table
+          messageDiv.textContent = "Ride recorded! Ride #: " + result.ride_number;
+          fetchRides();
         } else {
           messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
         }
@@ -198,7 +198,7 @@
       paginatedRides.forEach(ride => {
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${ride.id}</td>
+          <td>${ride. ride_number}</td>
           <td>${ride.line}</td>
           <td>${ride.board_stop}</td>
           <td>${ride.depart_stop}</td>
