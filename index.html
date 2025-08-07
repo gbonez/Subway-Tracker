@@ -97,8 +97,7 @@
         };
 
         try {
-            const hostname = window.location.hostname;
-            const backendUrl = `http://${hostname}:8000`;
+            const backendUrl = `https://subway-tracker-production.up.railway.app`;
             const res = await fetch(`${backendUrl}/rides/`, {
             method: "POST",
             headers: {
