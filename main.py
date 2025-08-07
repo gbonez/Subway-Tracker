@@ -6,12 +6,16 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+import os
 # -------------------------------
-# Database setup
+# DATABASE setup
 # -------------------------------
-DATABASE_URL = "sqlite:///./subway_rides.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./subway_rides.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+else:
+    engine = create_engine(DATABASE_URL)
 Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine)
 db = SessionLocal()
@@ -24,7 +28,7 @@ class SubwayRide(Base):
     board_stop = Column(String, nullable=False)
     depart_stop = Column(String, nullable=False)
     date = Column(DateTime, default=datetime.utcnow)
-    transferred = Column(Boolean, default=False)  # new field
+    transferred = Column(Boolean, default=False)
 
 Base.metadata.create_all(bind=engine)
 
@@ -48,6 +52,9 @@ class RideCreate(BaseModel):
     date: datetime = None
     transferred: bool = False
 
+# -------------------------------
+# API Routes
+# -------------------------------
 @app.post("/rides/")
 def create_ride(ride: RideCreate):
     ride_date = ride.date or datetime.utcnow()
