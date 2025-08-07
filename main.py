@@ -120,13 +120,14 @@ def delete_ride(ride_id: int, db: Session = Depends(get_db)):
 
 @app.delete("/rides/")
 def clear_all_rides(db: Session = Depends(get_db)):
-    rides = db.query(SubwayRide).all()
-    if not rides:
-        return {"message": "No rides to delete."}
-    for ride in rides:
-        db.delete(ride)
-    db.commit()
-    return {"message": f"Deleted {len(rides)} rides successfully."}
+    try:
+        db.query(SubwayRide).delete()
+        db.commit()
+        return {"message": "All rides deleted successfully."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error clearing rides: {str(e)}")
+
 
 
 @app.get("/rides/export")

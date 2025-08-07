@@ -72,6 +72,7 @@
         <option value="100">100</option>
         <option value="all">All</option>
       </select>
+      <button onclick="fetchRides()">Refresh Table</button>
       <button onclick="exportCSV()">Export CSV</button>
       <button onclick="clearDatabase()">Clear Table</button>
     </div>
@@ -251,7 +252,7 @@
           });
 
           if (res.ok) {
-            fetchRides(); // Re-fetch and refresh the table
+            fetchRides();
           } else {
             alert(`Failed to delete ride #${rideId}`);
           }
