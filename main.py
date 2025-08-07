@@ -70,10 +70,15 @@ class RideCreate(BaseModel):
 # -------------------------------
 @app.post("/rides/")
 def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
-    # Get current max ride_number
-    max_ride_number = db.query(SubwayRide.ride_number).order_by(SubwayRide.ride_number.desc()).first()
-    next_ride_number = (max_ride_number[0] + 1) if max_ride_number else 1
+    # Get all existing ride numbers as a set
+    existing_numbers = set(num[0] for num in db.query(SubwayRide.ride_number).all())
 
+    # Find the next available ride number not in use
+    next_ride_number = 1
+    while next_ride_number in existing_numbers:
+        next_ride_number += 1
+
+    # Create and save the new ride
     new_ride = SubwayRide(
         ride_number=next_ride_number,
         line=ride.line,
@@ -82,9 +87,11 @@ def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
         date=ride.date,
         transferred=ride.transferred,
     )
+
     db.add(new_ride)
     db.commit()
     db.refresh(new_ride)
+
     return {"message": "Ride recorded!", "ride_id": new_ride.id}
 
 @app.get("/rides/")
