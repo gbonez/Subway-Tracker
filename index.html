@@ -84,6 +84,7 @@
           <th>Departing Stop</th>
           <th>Date</th>
           <th>Transferred</th>
+          <th>Delete?</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -236,23 +237,31 @@
       }
     }
 
-    async function deleteRide(rideNumber) {
-      if (confirm(`Delete ride #${rideNumber}?`)) {
+    async function deleteRide(buttonElement) {
+      const rideId = buttonElement.getAttribute("data-id");
+      if (!rideId) {
+        alert("Invalid ride ID");
+        return;
+      }
+
+      if (confirm(`Delete ride #${rideId}?`)) {
         try {
-          const res = await fetch(`${backendUrl}/rides/${rideNumber}`, {
+          const res = await fetch(`${backendUrl}/rides/${rideId}`, {
             method: "DELETE"
           });
+
           if (res.ok) {
-            fetchRides();
+            fetchRides(); // Re-fetch and refresh the table
           } else {
-            alert(`Failed to delete ride #${rideNumber}`);
+            alert(`Failed to delete ride #${rideId}`);
           }
         } catch (err) {
-          console.error(`Error deleting ride #${rideNumber}:`, err);
-          alert("Error deleting ride.");
+          console.error("Error deleting ride:", err);
+          alert(`Error deleting ride #${rideId}`);
         }
       }
     }
+
 
   
     async function clearDatabase() {
@@ -261,12 +270,13 @@
           const res = await fetch(`${backendUrl}/rides/`, { method: "DELETE" });
           if (res.ok) {
             await fetchRides();
+            alert("Cleared all rides from table.");
           } else {
-            alert("Failed to clear database.");
+            alert("Failed to clear rides.");
           }
         } catch (err) {
           console.error("Error clearing DB:", err);
-          alert("Error clearing database.");
+          alert("Error clearing rides.");
         }
       }
     }

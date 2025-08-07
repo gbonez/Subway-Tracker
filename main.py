@@ -112,13 +112,14 @@ def delete_ride(ride_id: int):
 
 @app.delete("/rides/")
 def clear_all_rides(db: Session = Depends(get_db)):
-    try:
-        db.execute(text("TRUNCATE TABLE rides RESTART IDENTITY CASCADE"))
-        db.commit()
-        return {"message": "All rides cleared from the table."}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error clearing rides table: {str(e)}")
+    rides = db.query(SubwayRide).all()
+    if not rides:
+        return {"message": "No rides to delete."}
+    for ride in rides:
+        db.delete(ride)
+    db.commit()
+    return {"message": f"Deleted {len(rides)} rides successfully."}
+
 
 @app.get("/rides/export")
 def export_rides_csv(db: Session = Depends(get_db)):
