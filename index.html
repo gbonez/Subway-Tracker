@@ -192,6 +192,7 @@
         if (!res.ok) throw new Error("Failed to fetch rides");
         const data = await res.json();
         allRides = data.sort((a, b) => new Date(b.date) - new Date(a.date));
+        currentPage = 1; // ✅ Always reset to first page on new fetch
       } catch (err) {
         allRides = [];
         console.warn("No rides found or error occurred:", err);
