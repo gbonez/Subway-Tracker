@@ -1,18 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NYC Subway Ride Tracker</title>
   <style>
-    body { font-family: sans-serif; margin: 2em; }
-    select, button, input[type="date"] {
+    body {
+      font-family: sans-serif;
+      margin: 2em;
+    }
+
+    select,
+    button,
+    input[type="date"] {
       margin: 0.5em 0;
       padding: 0.5em;
       width: 100%;
       max-width: 300px;
     }
-    #message { margin-top: 1em; color: green; }
+
+    #message {
+      margin-top: 1em;
+      color: green;
+    }
 
     table {
       margin-top: 2em;
@@ -21,7 +32,8 @@
       max-width: 900px;
     }
 
-    th, td {
+    th,
+    td {
       border: 1px solid #ccc;
       padding: 8px 12px;
       text-align: left;
@@ -30,10 +42,10 @@
     th {
       background-color: #f2f2f2;
     }
-
   </style>
-  <script src="stopsByLine.js"></script> 
+  <script src="stopsByLine.js"></script>
 </head>
+
 <body>
   <h1>Record a Subway Ride</h1>
 
@@ -65,30 +77,30 @@
   <div id="loading" style="display: none; font-weight: bold; margin-top: 1em;">Loading rides...</div>
   <div>
     <label for="entriesPerPage">Show entries:</label>
-      <select id="entriesPerPage" onchange="changeEntriesPerPage()">
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-        <option value="all">All</option>
-      </select>
-      <button onclick="fetchRides()">Refresh Table</button>
-      <button onclick="clearDatabase()">Clear Table</button>
-      <button onclick="exportCSV()">Export Table</button>
-    </div>
-    <table id="ridesTable" border="1" style="margin-top: 1em;">
-      <thead>
-        <tr>
-          <th>Ride #</th>
-          <th>Line</th>
-          <th>Boarding Stop</th>
-          <th>Departing Stop</th>
-          <th>Date</th>
-          <th>Transferred</th>
-          <th>Delete?</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <select id="entriesPerPage" onchange="changeEntriesPerPage()">
+      <option value="25" selected>25</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+      <option value="all">All</option>
+    </select>
+    <button onclick="fetchRides()">Refresh Table</button>
+    <button onclick="clearDatabase()">Clear Table</button>
+    <button onclick="exportCSV()">Export Table</button>
+  </div>
+  <table id="ridesTable" border="1" style="margin-top: 1em;">
+    <thead>
+      <tr>
+        <th><button onclick="sortRides('ride_number')">Ride #</button></th>
+        <th><button onclick="sortRides('line')">Line</button></th>
+        <th><button onclick="sortRides('boarding_stop')">Boarding Stop</button></th>
+        <th><button onclick="sortRides('departing_stop')">Departing Stop</button></th>
+        <th><button onclick="sortRides('date')">Date</button></th>
+        <th><button onclick="sortRides('transferred')">Transferred</button></th>
+        <th>Delete?</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
   <div id="paginationControls" style="margin-top: 1em;"></div>
 
   <script>
@@ -101,6 +113,8 @@
     const ridesTableBody = document.querySelector("#ridesTable tbody");
 
     let allRides = [];
+    let currentSortColumn = "ride_number";
+    let currentSortDirection = "desc";
     let currentPage = 1;
     let entriesPerPage = 25;
 
@@ -183,7 +197,6 @@
       }
     }
 
-  
     async function fetchRides() {
       const loadingIndicator = document.getElementById("loading");
       loadingIndicator.style.display = "block";
@@ -191,8 +204,9 @@
         const res = await fetch(`${backendUrl}/rides/`);
         if (!res.ok) throw new Error("Failed to fetch rides");
         const data = await res.json();
-        allRides = data.sort((a, b) => new Date(b.date) - new Date(a.date));
-        currentPage = 1; // ✅ Always reset to first page on new fetch
+        allRides = data;
+        sortRides();
+        currentPage = 1;
       } catch (err) {
         allRides = [];
         console.warn("No rides found or error occurred:", err);
@@ -202,22 +216,83 @@
       }
     }
 
-  
+    function sortRides(column) {
+      if (column) {
+        if (column === currentSortColumn) {
+          currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+        } else {
+          currentSortColumn = column;
+          currentSortDirection = "asc";
+        }
+      }
+
+      allRides.sort((a, b) => {
+        let valA = a[currentSortColumn];
+        let valB = b[currentSortColumn];
+
+        if (currentSortColumn === "date") {
+          valA = new Date(valA);
+          valB = new Date(valB);
+        } else if (currentSortColumn === "ride_number") {
+          valA = parseInt(valA, 10);
+          valB = parseInt(valB, 10);
+        } else {
+          valA = valA?.toString().toLowerCase();
+          valB = valB?.toString().toLowerCase();
+        }
+
+        if (valA < valB) return currentSortDirection === "asc" ? -1 : 1;
+        if (valA > valB) return currentSortDirection === "asc" ? 1 : -1;
+        return 0;
+      });
+
+      renderRides();
+    }
+
     function changeEntriesPerPage() {
       const value = document.getElementById("entriesPerPage").value;
       entriesPerPage = value === "all" ? allRides.length : parseInt(value);
       currentPage = 1;
       renderTable();
     }
-  
+
     function renderTable() {
       const tableBody = document.querySelector("#ridesTable tbody");
       tableBody.innerHTML = "";
-  
+
+      // Add click handlers and arrows to header
+      const headerRow = document.querySelector("#ridesTable thead tr");
+      const headers = headerRow.querySelectorAll("th");
+      const sortableColumns = ["ride_number", "line", "board_stop", "depart_stop", "date", "transferred"];
+
+      headers.forEach((th, i) => {
+        const key = sortableColumns[i];
+        if (!key) return; // Skip non-sortable (like delete)
+
+        th.style.cursor = "pointer";
+        th.onclick = () => {
+          if (currentSortColumn === key) {
+            currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+          } else {
+            currentSortColumn = key;
+            currentSortDirection = "asc";
+          }
+          sortRides();
+          renderTable();
+        };
+
+        // Add arrow indicator
+        let arrow = "";
+        if (currentSortColumn === key) {
+          arrow = currentSortDirection === "asc" ? " ▲" : " ▼";
+        }
+        th.textContent = th.textContent.split(" ")[0] + arrow;
+      });
+
       const start = (currentPage - 1) * entriesPerPage;
       const end = start + entriesPerPage;
       const paginatedRides = allRides.slice(start, end);
-  
+
       paginatedRides.forEach(ride => {
         const row = document.createElement("tr");
         row.innerHTML = `
@@ -239,10 +314,10 @@
 
         tableBody.appendChild(row);
       });
-  
+
       renderPaginationControls();
     }
-  
+
     function renderPaginationControls() {
       const totalPages = Math.ceil(allRides.length / entriesPerPage);
       const container = document.getElementById("paginationControls");
@@ -285,9 +360,34 @@
       }, currentPage === totalPages));
     }
 
+    async function deleteRide(buttonElement) {
+      const rideId = buttonElement.getAttribute("data-id");
+      const rideNumber = buttonElement.getAttribute("data-ride-number");
 
+      if (!rideId) {
+        alert("Invalid ride ID");
+        return;
+      }
 
-  
+      const confirmed = confirm(`Delete ride #${rideNumber}?`);
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch(`${backendUrl}/rides/${rideId}`, {
+          method: "DELETE"
+        });
+
+        if (res.ok) {
+          await fetchRides();
+        } else {
+          alert("Failed to delete ride.");
+        }
+      } catch (err) {
+        console.error("Error deleting ride:", err);
+        alert("An error occurred while deleting.");
+      }
+    }
+
     async function clearDatabase() {
       if (confirm("Are you sure you want to delete all rides?")) {
         try {
@@ -305,10 +405,10 @@
       }
     }
 
-  
     function exportCSV() {
       window.location.href = "https://subway-tracker-production.up.railway.app/rides/export";
     }
   </script>
 </body>
+
 </html>
