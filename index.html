@@ -138,7 +138,7 @@
 
 <body>
   <div class="container">
-    <h1>Record a Subway Ride</h1>
+    <h1>Record a Subway Ride 🚇</h1>
 
     <label for="line">Line:</label>
     <select id="line">
@@ -274,8 +274,8 @@
           const result = await res.json();
 
           if (res.ok) {
-            messageDiv.textContent = "New ride successfully recorded!";
-            await fetchRides();  // wait for table update before enabling
+            messageDiv.textContent = "New ride successfully recorded! ✅";
+            await fetchRides();
           } else {
             messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
           }
