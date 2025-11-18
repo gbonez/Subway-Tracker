@@ -14,7 +14,31 @@ import re
 from urllib.parse import urlparse, unquote
 from typing import List
 import asyncio
+import subprocess
+import sys
 from playwright.async_api import async_playwright
+
+# -------------------------------
+# PLAYWRIGHT SETUP
+# -------------------------------
+def install_playwright_browsers():
+    """Install Playwright browsers if not already installed"""
+    try:
+        print("🔍 Checking if Playwright browsers are installed...")
+        # Try to run playwright install
+        result = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], 
+                              capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            print("✅ Playwright browsers installed successfully")
+        else:
+            print(f"⚠️ Playwright install warning: {result.stderr}")
+    except subprocess.TimeoutExpired:
+        print("⏰ Playwright install timeout - continuing anyway")
+    except Exception as e:
+        print(f"⚠️ Could not install Playwright browsers: {e}")
+
+# Install browsers on startup
+install_playwright_browsers()
 
 # -------------------------------
 # DATABASE setup
@@ -131,11 +155,30 @@ async def extract_transit_info_async(url: str) -> List[ParsedRide]:
         print(f"🔍 Starting headless browser extraction for URL: {url}")
         
         async with async_playwright() as p:
-            # Launch browser in headless mode
-            browser = await p.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-dev-shm-usage']  # For Railway deployment
-            )
+            # Launch browser in headless mode with error handling
+            try:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']  # For Railway deployment
+                )
+            except Exception as launch_error:
+                print(f"❌ Failed to launch browser: {launch_error}")
+                print("💡 Trying to install browsers automatically...")
+                try:
+                    # Try to install browsers if launch fails
+                    result = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], 
+                                          capture_output=True, text=True, timeout=120)
+                    if result.returncode == 0:
+                        print("✅ Browsers installed, retrying launch...")
+                        browser = await p.chromium.launch(
+                            headless=True,
+                            args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+                        )
+                    else:
+                        raise Exception(f"Browser installation failed: {result.stderr}")
+                except Exception as install_error:
+                    print(f"❌ Could not install browsers: {install_error}")
+                    raise launch_error
             
             try:
                 page = await browser.new_page()
