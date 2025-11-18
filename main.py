@@ -17,17 +17,35 @@ from typing import List
 # -------------------------------
 # DATABASE setup
 # -------------------------------
+# Railway provides DATABASE_URL, but we can also construct it from individual vars
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    # For local development, fall back to SQLite
-    DATABASE_URL = "sqlite:///./subway_rides.db"
-    print("⚠️  Using SQLite for local development")
-else:
-    print("🐘 Using PostgreSQL database from Railway")
 
-if DATABASE_URL.startswith("sqlite"):
+# If DATABASE_URL is not available, construct it from Railway's PostgreSQL environment variables
+if not DATABASE_URL:
+    pg_user = os.getenv("PGUSER") or os.getenv("POSTGRES_USER")
+    pg_password = os.getenv("PGPASSWORD") or os.getenv("POSTGRES_PASSWORD")
+    pg_host = os.getenv("PGHOST") or os.getenv("RAILWAY_PRIVATE_DOMAIN")
+    pg_port = os.getenv("PGPORT", "5432")
+    pg_database = os.getenv("PGDATABASE") or os.getenv("POSTGRES_DB")
+    
+    if all([pg_user, pg_password, pg_host, pg_database]):
+        DATABASE_URL = f"postgresql://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_database}"
+        print(f"🔧 Constructed DATABASE_URL from Railway PostgreSQL variables")
+    else:
+        # For local development, fall back to SQLite
+        DATABASE_URL = "sqlite:///./subway_rides.db"
+        print("⚠️  Using SQLite for local development")
+
+# Log which database we're using
+if DATABASE_URL.startswith("postgresql"):
+    print("🐘 Using PostgreSQL database from Railway")
+    # For PostgreSQL, we need to handle SSL properly
+    engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
+elif DATABASE_URL.startswith("sqlite"):
+    print("📁 Using SQLite database for local development")
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
+    print(f"🔗 Using database: {DATABASE_URL}")
     engine = create_engine(DATABASE_URL)
 Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine)
