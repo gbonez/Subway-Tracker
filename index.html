@@ -246,7 +246,25 @@
       let currentPage = 1;
       let entriesPerPage = 25;
 
-      window.addEventListener("DOMContentLoaded", () => {
+      window.addEventListener("DOMContentLoaded", async () => {
+        // Test backend connectivity first
+        console.log("🔗 Testing backend connectivity...");
+        try {
+          const healthRes = await fetch(`${backendUrl}/`);
+          const healthData = await healthRes.json();
+          console.log("✅ Backend health check:", healthData);
+          
+          // Test database connectivity
+          const dbRes = await fetch(`${backendUrl}/test-db`);
+          const dbData = await dbRes.json();
+          console.log("🐘 Database test:", dbData);
+        } catch (err) {
+          console.error("❌ Backend connectivity failed:", err);
+          messageDiv.textContent = `Cannot connect to backend: ${err.message}`;
+          messageDiv.style.color = "#ff6b6b";
+        }
+        
+        // Load subway lines
         const lines = Object.keys(stopsByLine).sort();
         lines.forEach(line => {
           const opt = document.createElement("option");
@@ -328,16 +346,39 @@
       async function fetchRides() {
         const loadingIndicator = document.getElementById("loading");
         loadingIndicator.style.display = "block";
+        
+        console.log("🔍 Fetching rides from:", `${backendUrl}/rides/`);
+        
         try {
           const res = await fetch(`${backendUrl}/rides/`);
-          if (!res.ok) throw new Error("Failed to fetch rides");
+          console.log("📡 Response status:", res.status);
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error("❌ Response error:", errorText);
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+          }
+          
           const data = await res.json();
+          console.log("📊 Received data:", data);
+          console.log("📊 Data length:", data.length);
+          
           allRides = data;
           sortRides();
           currentPage = 1;
+          
+          if (data.length === 0) {
+            messageDiv.textContent = "No rides found in database. Add some rides first!";
+            messageDiv.style.color = "#ffd700";
+          } else {
+            messageDiv.textContent = `Loaded ${data.length} rides from database ✅`;
+            messageDiv.style.color = "#90ee90";
+          }
         } catch (err) {
+          console.error("❌ Fetch error:", err);
           allRides = [];
-          console.warn("No rides found or error occurred:", err);
+          messageDiv.textContent = `Error loading rides: ${err.message}`;
+          messageDiv.style.color = "#ff6b6b";
         } finally {
           loadingIndicator.style.display = "none";
           renderTable();

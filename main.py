@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from datetime import date
-from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean, text
+from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean, text, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from io import StringIO
@@ -80,7 +80,8 @@ app.add_middleware(
     allow_origins=[
         "https://subway-tracker-production.up.railway.app",
         "http://localhost:3000",  # For local development
-        "http://127.0.0.1:3000"   # For local development
+        "http://127.0.0.1:3000",   # For local development
+        "*"  # Temporary for debugging
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
@@ -433,6 +434,43 @@ def health_check():
     """Health check endpoint for Railway deployment"""
     return {"status": "healthy", "message": "NYC Subway Tracker API is running"}
 
+@app.get("/test-db")
+def test_database(db: Session = Depends(get_db)):
+    """Test database connection"""
+    try:
+        ride_count = db.query(SubwayRide).count()
+        return {"status": "database connected", "total_rides": ride_count}
+    except Exception as e:
+        return {"status": "database error", "error": str(e)}
+
+@app.post("/add-test-data")
+def add_test_data(db: Session = Depends(get_db)):
+    """Add some test rides to the database"""
+    try:
+        # Check if we already have rides
+        existing_count = db.query(SubwayRide).count()
+        if existing_count > 0:
+            return {"message": f"Database already has {existing_count} rides"}
+        
+        # Add test rides
+        test_rides = [
+            SubwayRide(ride_number=1, line="6", board_stop="Union Sq-14th St", depart_stop="Grand Central-42nd St", date=date.today(), transferred=False),
+            SubwayRide(ride_number=2, line="4", board_stop="14th St-Union Sq", depart_stop="59th St-Columbus Circle", date=date.today(), transferred=True),
+            SubwayRide(ride_number=3, line="L", board_stop="14th St-8th Ave", depart_stop="Bedford Ave", date=date.today(), transferred=False),
+        ]
+        
+        for ride in test_rides:
+            db.add(ride)
+        
+        db.commit()
+        
+        new_count = db.query(SubwayRide).count()
+        return {"message": f"Added test data. Database now has {new_count} rides"}
+        
+    except Exception as e:
+        db.rollback()
+        return {"error": f"Failed to add test data: {str(e)}"}
+
 @app.post("/rides/")
 def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
     # Get all existing ride numbers as a set
@@ -492,8 +530,29 @@ async def parse_google_maps_url(request: UrlParseRequest):
 
 @app.get("/rides/")
 def get_all_rides(db: Session = Depends(get_db)):
-    rides = db.query(SubwayRide).all()
-    return rides
+    try:
+        print("🔍 Fetching rides from database...")
+        rides = db.query(SubwayRide).all()
+        print(f"📊 Found {len(rides)} rides in database")
+        
+        # Convert to list of dicts for JSON serialization
+        rides_data = []
+        for ride in rides:
+            rides_data.append({
+                "id": ride.id,
+                "ride_number": ride.ride_number,
+                "line": ride.line,
+                "board_stop": ride.board_stop,
+                "depart_stop": ride.depart_stop,
+                "date": ride.date.isoformat() if ride.date else None,
+                "transferred": ride.transferred
+            })
+        
+        print(f"✅ Returning {len(rides_data)} rides to frontend")
+        return rides_data
+    except Exception as e:
+        print(f"❌ Error fetching rides: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @app.get("/rides/export")
 def export_rides_csv(db: Session = Depends(get_db)):
