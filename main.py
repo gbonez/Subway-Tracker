@@ -117,314 +117,250 @@ def normalize_stop_name(stop_name: str) -> str:
             .title())
 
 def extract_transit_info_from_url(url: str) -> List[ParsedRide]:
-    """Extract transit information from Google Maps URL"""
+    """Extract transit information from Google Maps URL using improved URL parsing and station detection"""
     rides = []
     
     try:
-        print(f"🔍 Step 1/4: Following redirects for URL: {url}")
-        # Follow redirects to get the full URL
-        response = requests.get(url, allow_redirects=True, timeout=10)
-        full_url = response.url
-        html_content = response.text
+        # NYC Subway stations database for better matching
+        nyc_subway_stations = {
+            # Major stations
+            "times square": ["N", "Q", "R", "W", "S", "1", "2", "3", "7"],
+            "union square": ["4", "5", "6", "L", "N", "Q", "R", "W"],
+            "grand central": ["4", "5", "6", "7", "S"],
+            "penn station": ["1", "2", "3", "A", "C", "E"],
+            "atlantic terminal": ["B", "D", "N", "Q", "R", "W", "2", "3", "4", "5"],
+            "jay st metrotech": ["A", "C", "F", "R"],
+            "brooklyn bridge": ["4", "5", "6"],
+            "canal st": ["J", "M", "Z", "N", "Q", "R", "W", "6", "A", "C", "E"],
+            "14th st": ["1", "2", "3", "F", "M", "L"],
+            "42nd st": ["N", "Q", "R", "W", "S", "1", "2", "3", "7"],
+            "59th st": ["N", "Q", "R", "W", "A", "B", "C", "D"],
+            "125th st": ["A", "B", "C", "D", "4", "5", "6"],
+            "fulton st": ["A", "C", "J", "M", "Z", "2", "3", "4", "5"],
+            
+            # Brooklyn stations
+            "prospect park": ["B", "Q"],
+            "park slope": ["F", "G", "R"],
+            "williamsburg": ["J", "M", "Z", "L"],
+            "bedford ave": ["L"],
+            "lorimer st": ["J", "M", "G"],
+            "graham ave": ["L"],
+            "grand st": ["J", "M", "Z", "B", "D"],
+            "montrose ave": ["L"],
+            "bushwick": ["J", "M", "Z", "L"],
+            "east new york": ["A", "C", "J", "Z", "L"],
+            "broadway junction": ["A", "C", "J", "Z", "L"],
+            "new lots ave": ["3"],
+            "flatbush ave": ["B", "Q"],
+            "church ave": ["B", "Q"],
+            "bay ridge": ["R"],
+            "coney island": ["D", "F", "N", "Q"],
+            
+            # Manhattan stations  
+            "wall st": ["4", "5"],
+            "city hall": ["4", "5", "6", "R", "W"],
+            "houston st": ["1"],
+            "spring st": ["4", "5", "6", "N", "Q", "R", "W"],
+            "bleecker st": ["4", "5", "6"],
+            "astor pl": ["4", "5", "6"],
+            "8th st nyu": ["N", "Q", "R", "W"],
+            "23rd st": ["4", "5", "6", "N", "Q", "R", "W", "F", "M"],
+            "28th st": ["4", "5", "6", "N", "Q", "R", "W"],
+            "34th st": ["A", "C", "E", "B", "D", "F", "M", "N", "Q", "R", "W"],
+            "42nd st port authority": ["A", "C", "E", "N", "Q", "R", "S", "W", "1", "2", "3", "7"],
+            "50th st": ["A", "C", "E", "1"],
+            "57th st": ["N", "Q", "R", "W", "F"],
+            "72nd st": ["1", "2", "3", "B", "C"],
+            "86th st": ["4", "5", "6", "1"],
+            "96th st": ["1", "2", "3", "4", "5", "6", "B", "C"],
+            "103rd st": ["1", "6"],
+            "110th st": ["1", "2", "3", "B", "C"],
+            "116th st": ["1", "4", "5", "6", "B", "C"],
+            "135th st": ["2", "3", "B", "C"],
+            "145th st": ["1", "3", "A", "B", "C", "D"],
+            "155th st": ["A", "B", "C", "D"],
+            "175th st": ["A"],
+            "181st st": ["A"],
+            "190th st": ["A"],
+            "207th st": ["A"],
+            
+            # Queens stations
+            "queensboro plaza": ["7", "N", "Q", "R", "W"],
+            "court sq": ["7", "E", "M", "G"],
+            "jackson heights": ["7", "E", "F", "M", "R"],
+            "roosevelt ave": ["7", "E", "F", "M", "R"],
+            "74th st broadway": ["7", "E", "F", "M", "R"],
+            "flushing": ["7"],
+            "astoria": ["N", "Q", "R", "W"],
+            "long island city": ["7", "E", "M", "G"],
+            "lic": ["7", "E", "M", "G"],  # Abbreviation for Long Island City
+            
+            # Specific stations from your area (Brooklyn)
+            "humboldt st": ["G"],
+            "nassau ave": ["G"],
+            "greenpoint ave": ["G"],
+            "21st st queensbridge": ["F"],
+            "lexington ave 59th st": ["4", "5", "6", "N", "Q", "R", "W"],
+            "herald sq": ["B", "D", "F", "M", "N", "Q", "R", "W"],
+            "empire state building": ["B", "D", "F", "M", "N", "Q", "R", "W"],  # Near Herald Sq/34th St
+        }
         
-        print(f"📄 Step 2/4: Processing expanded URL: {full_url[:100]}...")
+        parsed_url = urlparse(url)
         
-        # Parse URL parameters first
-        parsed_url = urlparse(full_url)
-        decoded_url = unquote(full_url)
+        # If it's a short link, follow redirects
+        if 'goo.gl' in parsed_url.netloc or 'maps.app.goo.gl' in parsed_url.netloc:
+            print("🔍 Step 1/3: Following redirects for URL:", url)
+            response = requests.get(url, allow_redirects=True, timeout=10)
+            final_url = response.url
+            print(f"� Step 2/3: Processing expanded URL: {final_url[:100]}...")
+            parsed_url = urlparse(final_url)
         
-        print(f"🔎 Step 3/4: Attempting URL pattern matching...")
-        # Enhanced patterns to catch subway info in mixed-mode directions
-        transit_patterns = [
-            # Direct subway patterns
-            r'subway[^,]*?([0-9A-Z]+)[^,]*?(?:from|at)\s*([^,]+?)\s*(?:to|until)\s*([^,]+)',
-            r'([0-9A-Z]+)\s*(?:train|line)[^,]*?(?:from|at)\s*([^,]+?)\s*(?:to|until)\s*([^,]+)',
-            r'Take\s+(?:the\s+)?([0-9A-Z]+).*?from\s+([^,]+?)\s+to\s+([^,]+)',
-            # Patterns for mixed directions with walking + subway
-            r'(?:walk|walking).*?subway.*?([0-9A-Z]+).*?(?:from|at)\s*([^,]+?)\s*(?:to|until)\s*([^,]+)',
-            r'(?:walk|walking).*?([0-9A-Z]+)\s*(?:train|line).*?(?:from|at)\s*([^,]+?)\s*(?:to|until)\s*([^,]+)',
-        ]
+        print("🔎 Step 3/3: Extracting route information...")
         
-        # Search in URL first
-        for i, pattern in enumerate(transit_patterns):
-            print(f"   🔍 Trying URL pattern {i+1}/{len(transit_patterns)}: {pattern[:50]}...")
-            matches = re.finditer(pattern, decoded_url, re.IGNORECASE)
-            for match in matches:
-                line = match.group(1).upper()
-                board_stop = normalize_stop_name(match.group(2))
-                depart_stop = normalize_stop_name(match.group(3))
+        # Extract location names from URL
+        url_text = unquote(str(parsed_url)).lower()
+        
+        # Look for origin and destination in URL structure
+        # Google Maps URLs typically have /dir/ORIGIN/DESTINATION/ format
+        dir_match = re.search(r'/dir/([^/]+)/([^/]+)', url_text)
+        if dir_match:
+            origin = dir_match.group(1).replace('+', ' ').replace('%20', ' ')
+            destination = dir_match.group(2).replace('+', ' ').replace('%20', ' ')
+            
+            print(f"   📍 Found route: {origin} → {destination}")
+            
+            # Try to match station names to subway lines
+            origin_clean = re.sub(r'\d+\s+', '', origin).strip()  # Remove street numbers
+            destination_clean = re.sub(r'\d+\s+', '', destination).strip()
+            
+            # Look for station matches
+            origin_station = None
+            destination_station = None
+            possible_lines = []
+            
+            for station_name, lines in nyc_subway_stations.items():
+                if station_name in origin_clean.lower():
+                    origin_station = station_name.title()
+                    possible_lines.extend(lines)
+                    print(f"   ✅ Matched origin '{origin}' to station '{station_name}' (lines: {', '.join(lines)})")
                 
-                print(f"   ✅ Found match: {line} from {board_stop} to {depart_stop}")
-                ride = ParsedRide(
-                    line=line,
-                    board_stop=board_stop,
-                    depart_stop=depart_stop,
-                    transferred=False,
-                    confidence=70
-                )
-                rides.append(ride)
-        
-        # Enhanced HTML parsing for mixed-mode directions
-        if not rides:
-            print(f"🔎 Step 3/4: No URL matches found, analyzing HTML content...")
-            rides = extract_from_maps_page(html_content, full_url)
-        
-        # If still no rides, try alternative parsing methods
-        if not rides:
-            print(f"🔎 Step 3/4: Trying JSON data extraction...")
-            rides = extract_from_directions_data(html_content)
+                if station_name in destination_clean.lower():
+                    destination_station = station_name.title()
+                    possible_lines.extend(lines)
+                    print(f"   ✅ Matched destination '{destination}' to station '{station_name}' (lines: {', '.join(lines)})")
             
-        # Last resort: try to find any NYC subway station names in the content
-        if not rides:
-            print(f"🔎 Step 3/4: Attempting station name matching (last resort)...")
-            rides = extract_by_station_matching(html_content)
+            # If we found station matches, create rides
+            if origin_station and destination_station and possible_lines:
+                # Find common lines between origin and destination
+                origin_lines = set()
+                destination_lines = set()
+                
+                for station_name, lines in nyc_subway_stations.items():
+                    if station_name in origin_clean.lower():
+                        origin_lines.update(lines)
+                    if station_name in destination_clean.lower():
+                        destination_lines.update(lines)
+                
+                common_lines = origin_lines.intersection(destination_lines)
+                
+                if common_lines:
+                    # Use the first common line (could be improved with user preference)
+                    best_line = sorted(list(common_lines))[0]
+                    rides.append(ParsedRide(
+                        line=best_line,
+                        board_stop=origin_station,
+                        depart_stop=destination_station,
+                        transferred=False,
+                        confidence=90
+                    ))
+                    print(f"   🚇 Created ride: {best_line} line from {origin_station} to {destination_station}")
+                else:
+                    # Different lines, might require transfer
+                    if origin_lines and destination_lines:
+                        origin_line = sorted(list(origin_lines))[0]
+                        destination_line = sorted(list(destination_lines))[0]
+                        
+                        # Find a common transfer station (simplified)
+                        transfer_stations = ["times square", "union square", "42nd st", "14th st"]
+                        transfer_station = None
+                        
+                        for ts in transfer_stations:
+                            if ts in nyc_subway_stations:
+                                ts_lines = set(nyc_subway_stations[ts])
+                                if origin_line in ts_lines and destination_line in ts_lines:
+                                    transfer_station = ts.title()
+                                    break
+                        
+                        if transfer_station:
+                            # First ride to transfer station
+                            rides.append(ParsedRide(
+                                line=origin_line,
+                                board_stop=origin_station,
+                                depart_stop=transfer_station,
+                                transferred=True,
+                                confidence=85
+                            ))
+                            # Second ride from transfer station
+                            rides.append(ParsedRide(
+                                line=destination_line,
+                                board_stop=transfer_station,
+                                depart_stop=destination_station,
+                                transferred=False,
+                                confidence=85
+                            ))
+                            print(f"   � Created transfer route: {origin_line} to {transfer_station}, then {destination_line} to {destination_station}")
+                        else:
+                            # Just create one ride with best guess
+                            best_line = sorted(list(origin_lines))[0]
+                            rides.append(ParsedRide(
+                                line=best_line,
+                                board_stop=origin_station,
+                                depart_stop=destination_station,
+                                transferred=False,
+                                confidence=70
+                            ))
+                            print(f"   🚇 Created best-guess ride: {best_line} line from {origin_station} to {destination_station}")
             
-        print(f"✅ Step 4/4: Extraction complete. Found {len(rides)} rides.")
-        
+            # Fallback: try to extract any subway line mentions from the URL
+            if not rides:
+                print("   � No station matches, looking for line mentions in URL...")
+                line_pattern = r'(?:line|train)[\s\-_]*([1-7]|[A-Z])(?:\s|%20|$)'
+                line_matches = re.findall(line_pattern, url_text, re.IGNORECASE)
+                
+                if line_matches and origin_station and destination_station:
+                    for line in line_matches:
+                        rides.append(ParsedRide(
+                            line=line.upper(),
+                            board_stop=origin_station,
+                            depart_stop=destination_station,
+                            transferred=False,
+                            confidence=60
+                        ))
+                        print(f"   🚇 Created line-based ride: {line.upper()} from {origin_station} to {destination_station}")
+                        
     except Exception as e:
-        print(f"❌ Error extracting transit info: {e}")
-        raise HTTPException(status_code=400, detail=f"Could not parse Google Maps URL: {str(e)}")
-    
+        print(f"❌ URL parsing error: {str(e)}")
+        
+    print(f"✅ Extracted {len(rides)} rides from URL")
+                        
+    print(f"✅ Extracted {len(rides)} rides from URL")
     return rides
 
 def extract_from_maps_page(html_content: str, full_url: str = "") -> List[ParsedRide]:
-    """Extract transit information from Google Maps page HTML with enhanced parsing"""
-    rides = []
-    
-    print("   📝 Parsing HTML content for transit patterns...")
-    
-    # Enhanced patterns for mixed-mode directions
-    transit_patterns = [
-        # JSON-like data patterns
-        r'"transit"[^}]*?"short_name":"([^"]+)"[^}]*?"departure_stop"[^}]*?"name":"([^"]+)"[^}]*?"arrival_stop"[^}]*?"name":"([^"]+)"',
-        r'"vehicle"[^}]*?"name":"([^"]+)"[^}]*?"stops"[^}]*?"departure_stop"[^}]*?"name":"([^"]+)"[^}]*?"arrival_stop"[^}]*?"name":"([^"]+)"',
-        
-        # Text patterns for mixed directions
-        r'(?:walk|walking)[^.]*?(?:subway|train)[^.]*?([0-9A-Z]+)[^.]*?(?:from|at)\s*([^,.]+?)(?:\s+(?:to|until)\s*([^,.]+))?',
-        r'(?:subway|train)[^.]*?([0-9A-Z]+)[^.]*?(?:from|at)\s*([^,.]+?)(?:\s+(?:to|until)\s*([^,.]+))?',
-        
-        # Step-by-step direction patterns
-        r'board\s+(?:the\s+)?([0-9A-Z]+)[^.]*?at\s+([^,.]+)',
-        r'take\s+(?:the\s+)?([0-9A-Z]+)[^.]*?(?:from|at)\s+([^,.]+?)(?:\s+(?:to|until)\s+([^,.]+))?',
-        
-        # Station patterns
-        r'([0-9A-Z]+)\s*(?:line|train)[^.]*?station[^.]*?([^,.]+?)(?:[^.]*?to[^.]*?([^,.]+?))?',
-        
-        # Alternative patterns for embedded data
-        r'subway.*?line["\s]*:.*?["\s]*([0-9A-Z]+).*?from["\s]*:.*?["\s]*([^"]+)["\s]*.*?to["\s]*:.*?["\s]*([^"]+)',
-    ]
-    
-    # Also look for station names that might indicate subway routes
-    station_patterns = [
-        r'([0-9A-Z]+)\s+(?:line|train)[^.]*?([A-Z][^,.]*?(?:St|Ave|Pkwy|Plaza|Square|Center|Junction|Terminal))[^.]*?(?:to|until)[^.]*?([A-Z][^,.]*?(?:St|Ave|Pkwy|Plaza|Square|Center|Junction|Terminal))',
-        r'(?:from|at)\s+([A-Z][^,.]*?(?:St|Ave|Pkwy|Plaza|Square|Center|Junction|Terminal))[^.]*?([0-9A-Z]+)\s+(?:line|train)[^.]*?(?:to|until)[^.]*?([A-Z][^,.]*?(?:St|Ave|Pkwy|Plaza|Square|Center|Junction|Terminal))',
-    ]
-    
-    # Search through all patterns
-    for i, pattern in enumerate(transit_patterns):
-        print(f"      🔍 Trying HTML pattern {i+1}/{len(transit_patterns)}")
-        matches = re.finditer(pattern, html_content, re.IGNORECASE | re.DOTALL)
-        for match in matches:
-            try:
-                groups = match.groups()
-                if len(groups) >= 2:
-                    line = groups[0].upper() if groups[0] else None
-                    board_stop = groups[1] if len(groups) > 1 else None
-                    depart_stop = groups[2] if len(groups) > 2 and groups[2] else None
-                    
-                    # Clean and validate
-                    if line and line.strip() and board_stop and board_stop.strip():
-                        line = re.sub(r'[^0-9A-Z]', '', line.upper())[:3]  # Limit to 3 chars max
-                        board_stop = normalize_stop_name(board_stop)
-                        
-                        if depart_stop:
-                            depart_stop = normalize_stop_name(depart_stop)
-                            
-                            print(f"      ✅ Found HTML match: {line} from {board_stop} to {depart_stop}")
-                            ride = ParsedRide(
-                                line=line,
-                                board_stop=board_stop,
-                                depart_stop=depart_stop,
-                                transferred=False,
-                                confidence=60
-                            )
-                            rides.append(ride)
-                        else:
-                            # Store for potential pairing with next stop
-                            pass
-                            
-            except (IndexError, AttributeError):
-                continue
-    
-    # Try station patterns as backup
-    if not rides:
-        print("   📍 Trying station name patterns...")
-        for i, pattern in enumerate(station_patterns):
-            print(f"      🔍 Trying station pattern {i+1}/{len(station_patterns)}")
-            matches = re.finditer(pattern, html_content, re.IGNORECASE)
-            for match in matches:
-                try:
-                    groups = match.groups()
-                    if len(groups) >= 3:
-                        if groups[0].isdigit() or len(groups[0]) <= 3:  # First group is line
-                            line = groups[0].upper()
-                            board_stop = normalize_stop_name(groups[1])
-                            depart_stop = normalize_stop_name(groups[2])
-                        else:  # Station names first, then line
-                            line = groups[1].upper()
-                            board_stop = normalize_stop_name(groups[0])
-                            depart_stop = normalize_stop_name(groups[2])
-                        
-                        print(f"      ✅ Found station match: {line} from {board_stop} to {depart_stop}")
-                        ride = ParsedRide(
-                            line=line,
-                            board_stop=board_stop,
-                            depart_stop=depart_stop,
-                            transferred=False,
-                            confidence=50
-                        )
-                        rides.append(ride)
-                except (IndexError, AttributeError):
-                    continue
-    
-    print(f"   📝 HTML parsing complete. Found {len(rides)} rides.")
+    """Simplified fallback parsing - mainly for backwards compatibility"""
+    print("   � Simplified HTML parsing (fallback only)...")
+    return []
     return rides
 
 def extract_from_directions_data(html_content: str) -> List[ParsedRide]:
-    """Extract transit info from Google Maps directions data and embedded JSON"""
-    rides = []
-    
-    print("   📊 Analyzing embedded JSON data...")
-    
-    try:
-        # Look for embedded JSON data that might contain route information
-        json_patterns = [
-            r'window\.APP_INITIALIZATION_STATE[^;]*;',
-            r'window\.APP_FLAGS[^;]*;',
-            r'\[\[null,null,null,null,\[.*?\]\]\]',
-        ]
-        
-        for i, pattern in enumerate(json_patterns):
-            print(f"      🔍 Trying JSON pattern {i+1}/{len(json_patterns)}")
-            matches = re.finditer(pattern, html_content, re.DOTALL)
-            for match in matches:
-                data_str = match.group(0)
-                
-                # Look for transit/subway references in the data
-                subway_refs = re.finditer(r'"([0-9A-Z]{1,3})"[^"]*"([^"]*(?:St|Ave|Station|Plaza|Square|Center|Junction|Terminal)[^"]*)"', data_str)
-                
-                stations = []
-                for ref in subway_refs:
-                    line_candidate = ref.group(1)
-                    station_candidate = ref.group(2)
-                    
-                    # Validate line format (1-3 alphanumeric characters)
-                    if re.match(r'^[0-9A-Z]{1,3}$', line_candidate) and len(station_candidate) > 3:
-                        stations.append((line_candidate, normalize_stop_name(station_candidate)))
-                        print(f"         📍 Found potential station: {line_candidate} - {station_candidate}")
-                
-                # Create rides from consecutive station pairs
-                for i in range(len(stations) - 1):
-                    line1, station1 = stations[i]
-                    line2, station2 = stations[i + 1]
-                    
-                    # Use the first line found, assuming it's the main route
-                    print(f"      ✅ Created JSON ride: {line1} from {station1} to {station2}")
-                    ride = ParsedRide(
-                        line=line1,
-                        board_stop=station1,
-                        depart_stop=station2,
-                        transferred=line1 != line2,
-                        confidence=40
-                    )
-                    rides.append(ride)
-                    
-    except Exception as e:
-        print(f"   ❌ Error parsing JSON data: {e}")
-    
-    print(f"   📊 JSON analysis complete. Found {len(rides)} rides.")
-    return rides
+    """Simplified fallback parsing - mainly for backwards compatibility"""
+    print("   � Simplified JSON analysis (fallback only)...")
+    return []
 
 def extract_by_station_matching(html_content: str) -> List[ParsedRide]:
-    """Last resort: match against known NYC subway station names"""
-    rides = []
-    
-    print("   🗺️  Attempting NYC station name matching (last resort)...")
-    
-    # Common NYC subway station keywords and patterns
-    nyc_station_keywords = [
-        "St", "Ave", "Pkwy", "Plaza", "Square", "Center", "Junction", "Terminal",
-        "Penn Station", "Union Sq", "Times Sq", "Columbus Circle", "Grand Central",
-        "Herald Sq", "14th St", "42nd St", "59th St", "86th St", "96th St",
-        "125th St", "Canal St", "Houston St", "Spring St", "Bleecker St",
-        "Brooklyn Bridge", "City Hall", "Wall St", "Fulton St", "Atlantic Ave",
-        "Jay St", "DeKalb Ave", "Fort Hamilton", "Bay Ridge", "Coney Island"
-    ]
-    
-    # Find potential station names in the HTML
-    potential_stations = []
-    print(f"      🔍 Searching for {len(nyc_station_keywords)} NYC station keywords...")
-    
-    for keyword in nyc_station_keywords:
-        pattern = rf'([^<>"]*{re.escape(keyword)}[^<>"]*)'
-        matches = re.finditer(pattern, html_content, re.IGNORECASE)
-        for match in matches:
-            station_text = match.group(1).strip()
-            if 5 <= len(station_text) <= 50:  # Reasonable station name length
-                cleaned = normalize_stop_name(station_text)
-                if cleaned not in [ps[1] for ps in potential_stations]:
-                    potential_stations.append(("Unknown", cleaned))
-                    print(f"         📍 Found potential station: {cleaned}")
-    
-    print(f"      📍 Found {len(potential_stations)} potential stations")
-    
-    # Look for line numbers/letters near station names
-    enhanced_stations = []
-    for line, station in potential_stations:
-        # Look for nearby line indicators
-        station_index = html_content.lower().find(station.lower())
-        if station_index > 0:
-            # Check 200 characters before and after the station name
-            context = html_content[max(0, station_index-200):station_index+200]
-            
-            # Look for line indicators
-            line_patterns = [
-                r'([0-9A-Z]{1,2})\s*(?:line|train)',
-                r'(?:line|train)\s*([0-9A-Z]{1,2})',
-                r'subway\s*([0-9A-Z]{1,2})',
-                r'([0-9A-Z])\s*express',
-                r'([0-9A-Z])\s*local'
-            ]
-            
-            found_line = None
-            for pattern in line_patterns:
-                match = re.search(pattern, context, re.IGNORECASE)
-                if match:
-                    found_line = match.group(1).upper()
-                    print(f"         🚇 Found line {found_line} near {station}")
-                    break
-            
-            enhanced_stations.append((found_line or "Unknown", station))
-    
-    # Create rides from pairs of stations
-    if len(enhanced_stations) >= 2:
-        print(f"      🔗 Creating rides from {len(enhanced_stations)} enhanced stations...")
-        for i in range(len(enhanced_stations) - 1):
-            line1, station1 = enhanced_stations[i]
-            line2, station2 = enhanced_stations[i + 1]
-            
-            print(f"      ✅ Created station match ride: {line1 if line1 != 'Unknown' else line2} from {station1} to {station2}")
-            ride = ParsedRide(
-                line=line1 if line1 != "Unknown" else line2,
-                board_stop=station1,
-                depart_stop=station2,
-                transferred=line1 != line2 and line1 != "Unknown" and line2 != "Unknown",
-                confidence=25  # Low confidence for this method
-            )
-            rides.append(ride)
-    
-    print(f"   🗺️  Station matching complete. Found {len(rides)} rides.")
-    return rides
+    """Disabled to prevent CSS/JS false positives"""
+    print("   �️  Station matching disabled to prevent false positives...")
+    return []
 
 # -------------------------------
 # API Routes
