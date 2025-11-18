@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-# Install system dependencies required for Playwright browsers
+# Install dependencies for Playwright browsers
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -22,21 +22,20 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 \
     libxcomposite1 \
     libxrandr2 \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install Python dependencies
+# Copy requirements and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers
 RUN python -m playwright install chromium
 
-# Copy application code
+# Copy your code
 COPY . .
 
-# Let Railway handle port automatically - no port specification
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0"]
+# Default command - just run the main script
+CMD ["python", "main.py"]

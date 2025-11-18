@@ -579,3 +579,22 @@ def clear_all_rides(db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error clearing rides: {str(e)}")
+
+# -------------------------------
+# SERVER STARTUP
+# -------------------------------
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Get port from environment variable, default to 8000
+    port = int(os.getenv("PORT", "8000"))
+    
+    print(f"🚀 Starting server on port {port}...")
+    
+    # Start the FastAPI server
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=port,
+        log_level="info"
+    )
