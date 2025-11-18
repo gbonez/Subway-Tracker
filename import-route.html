@@ -193,7 +193,8 @@
             margin: 0.5em 0;
         }
 
-        .inline-edit select, .inline-edit input {
+        .inline-edit select,
+        .inline-edit input {
             padding: 0.5em;
             background-color: var(--input-bg);
             border: 1px solid var(--input-border);
@@ -500,7 +501,7 @@
                 `;
 
                 container.appendChild(rideDiv);
-                
+
                 // Set up line change handlers for this ride
                 setupLineChangeHandler(index);
             });
@@ -510,7 +511,7 @@
 
         function generateLineOptions(selectedLine) {
             const lines = Object.keys(stopsByLine).sort();
-            return lines.map(line => 
+            return lines.map(line =>
                 `<option value="${line}" ${line === selectedLine ? 'selected' : ''}>${line}</option>`
             ).join('');
         }
@@ -543,7 +544,7 @@
 
                 // Trigger initial population
                 lineSelect.dispatchEvent(new Event('change'));
-                
+
                 // Set current values
                 const currentRide = parsedRidesData[index];
                 if (boardSelect) boardSelect.value = currentRide.board_stop;
@@ -643,7 +644,7 @@
 
             parsedRidesData.splice(insertIndex, 0, newRide);
             displayParsedRoute(); // Refresh the display
-            
+
             // Automatically start editing the new ride
             setTimeout(() => editRide(insertIndex), 100);
         }
