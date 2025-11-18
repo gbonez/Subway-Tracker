@@ -1,0 +1,25 @@
+# Local development files
+*.pyc
+__pycache__/
+.env
+.venv/
+env/
+venv/
+
+# Local SQLite database (only use in development)
+subway_rides.db
+
+# OS and IDE files
+.DS_Store
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log

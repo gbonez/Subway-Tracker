@@ -132,15 +132,52 @@
         display: block;
       }
     }
+
+    .nav-links {
+      margin-bottom: 2em;
+      display: flex;
+      gap: 1em;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--text-color);
+      text-decoration: none;
+      padding: 0.5em 1em;
+      border: 1px solid var(--input-border);
+      background-color: var(--input-bg);
+      border-radius: 4px;
+    }
+
+    .nav-links a:hover {
+      background-color: var(--button-bg);
+    }
+
+    .nav-links a.active {
+      background-color: var(--button-bg);
+    }
+
+    @media (max-width: 600px) {
+      .nav-links {
+        flex-direction: column;
+      }
+
+      .nav-links a {
+        text-align: center;
+      }
+    }
   </style>
   <script src="stopsByLine.js"></script>
 </head>
 
 <body>
   <div class="container">
-    <h1>Record a Subway Ride 🚇</h1>
+    <nav class="nav-links">
+      <a href="index.html" class="active">Record Ride</a>
+      <a href="import-route.html">Import Route</a>
+    </nav>
 
-    <label for="line">Line:</label>
+    <h1>Record a Subway Ride 🚇</h1> <label for="line">Line:</label>
     <select id="line">
       <option value="">Select a line</option>
     </select><br>

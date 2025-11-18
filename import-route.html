@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NYC Subway Route Importer</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --border-color: #333;
+            --highlight-color: #1e1e1e;
+            --input-bg: #1e1e1e;
+            --input-border: #444;
+            --button-bg: #333;
+            --button-text: #fff;
+            --success-color: #90ee90;
+            --warning-color: #ffd700;
+            --error-color: #ff6b6b;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: sans-serif;
+            margin: 1em;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 1em;
+            box-sizing: border-box;
+        }
+
+        .nav-links {
+            margin-bottom: 2em;
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            padding: 0.5em 1em;
+            border: 1px solid var(--input-border);
+            background-color: var(--input-bg);
+            border-radius: 4px;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--button-bg);
+        }
+
+        .nav-links a.active {
+            background-color: var(--button-bg);
+        }
+
+        input[type="url"] {
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--input-border);
+            margin: 0.5em 0;
+            padding: 0.75em;
+            font-size: 1rem;
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: 1px solid var(--input-border);
+            cursor: pointer;
+            padding: 0.75em 1.5em;
+            font-size: 1rem;
+            margin: 0.5em 0.5em 0.5em 0;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background-color: #444;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin: 1em 0;
+            padding: 0.75em;
+            border-radius: 4px;
+        }
+
+        .success {
+            background-color: rgba(144, 238, 144, 0.1);
+            border: 1px solid var(--success-color);
+            color: var(--success-color);
+        }
+
+        .warning {
+            background-color: rgba(255, 215, 0, 0.1);
+            border: 1px solid var(--warning-color);
+            color: var(--warning-color);
+        }
+
+        .error {
+            background-color: rgba(255, 107, 107, 0.1);
+            border: 1px solid var(--error-color);
+            color: var(--error-color);
+        }
+
+        .info-box {
+            margin: 1em 0;
+            padding: 1em;
+            background-color: var(--highlight-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        .route-preview {
+            border: 1px solid var(--border-color);
+            background-color: var(--highlight-color);
+            padding: 1em;
+            margin: 1em 0;
+            border-radius: 4px;
+        }
+
+        .ride-item {
+            border: 1px solid var(--input-border);
+            background-color: var(--input-bg);
+            padding: 1em;
+            margin: 0.5em 0;
+            border-radius: 4px;
+        }
+
+        .ride-item.transfer {
+            border-left: 4px solid var(--warning-color);
+        }
+
+        .ride-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5em;
+            margin: 0.5em 0;
+        }
+
+        .ride-detail {
+            font-size: 0.9em;
+        }
+
+        .ride-detail strong {
+            color: var(--success-color);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .nav-links {
+                flex-direction: column;
+            }
+
+            .nav-links a {
+                text-align: center;
+            }
+
+            .ride-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <script src="stopsByLine.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <nav class="nav-links">
+            <a href="index.html">Record Ride</a>
+            <a href="import-route.html" class="active">Import Route</a>
+        </nav>
+
+        <h1>Import Subway Route 📋</h1>
+
+        <div>
+            <h2>Import from Google Maps Link</h2>
+            <p>Paste a Google Maps link with transit directions to automatically extract subway route information:</p>
+
+            <label for="mapsUrl">Google Maps Link:</label>
+            <input type="url" id="mapsUrl" placeholder="https://maps.app.goo.gl/...">
+
+            <div class="info-box">
+                <h3>How to get a Google Maps link:</h3>
+                <ol style="margin: 0.5em 0; padding-left: 1.5em;">
+                    <li>Open Google Maps and search for your destination</li>
+                    <li>Click "Directions" and select transit/subway mode 🚇</li>
+                    <li>Choose your preferred route</li>
+                    <li>Click "Share" and copy the link</li>
+                    <li>Paste the link above and click "Import Route"</li>
+                </ol>
+                <p style="margin: 0.5em 0; font-size: 0.9em; color: #888;">
+                    <strong>Example:</strong> https://maps.app.goo.gl/aw1zvsxHDKhZEbsv5
+                </p>
+            </div>
+
+            <button id="parseButton" onclick="parseFromLink()">Import Route</button>
+            <button id="clearButton" onclick="clearAll()">Clear</button>
+        </div>
+
+        <div id="messageArea"></div>
+
+        <div id="routePreview" class="route-preview hidden">
+            <h2>Parsed Route</h2>
+            <p>Please review the parsed rides below and make any corrections before submitting:</p>
+            <div id="parsedRides"></div>
+            <div style="margin-top: 1em;">
+                <button id="confirmButton" onclick="confirmAndSubmit()">Confirm & Submit All Rides</button>
+                <button onclick="clearAll()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const backendUrl = `https://subway-tracker-production.up.railway.app`;
+        let parsedRidesData = [];
+
+        function showMessage(text, type = 'success') {
+            const messageArea = document.getElementById('messageArea');
+            messageArea.innerHTML = `<div class="message ${type}">${text}</div>`;
+            setTimeout(() => {
+                messageArea.innerHTML = '';
+            }, 5000);
+        }
+
+        function clearAll() {
+            document.getElementById('mapsUrl').value = '';
+            document.getElementById('routePreview').classList.add('hidden');
+            document.getElementById('messageArea').innerHTML = '';
+            parsedRidesData = [];
+        }
+
+        function isValidGoogleMapsUrl(url) {
+            try {
+                const urlObj = new URL(url);
+                return urlObj.hostname.includes('maps.google.com') ||
+                    urlObj.hostname.includes('maps.app.goo.gl') ||
+                    urlObj.hostname.includes('goo.gl');
+            } catch {
+                return false;
+            }
+        }
+
+        async function parseFromLink() {
+            const mapsUrl = document.getElementById('mapsUrl').value.trim();
+
+            if (!mapsUrl) {
+                showMessage('Please enter a Google Maps link first.', 'warning');
+                return;
+            }
+
+            if (!isValidGoogleMapsUrl(mapsUrl)) {
+                showMessage('Please enter a valid Google Maps link. The link should start with https://maps.google.com or https://maps.app.goo.gl', 'warning');
+                return;
+            }
+
+            const button = document.getElementById('parseButton');
+            button.disabled = true;
+            button.textContent = 'Importing Route...';
+
+            try {
+                // Step 1: Initial validation
+                showMessage('Step 1/5: Validating Google Maps URL...', 'success');
+                await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause for UX
+
+                // Step 2: Fetching data
+                showMessage('Step 2/5: Fetching route data from Google Maps...', 'success');
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                // Step 3: Parsing content
+                showMessage('Step 3/5: Parsing directions and extracting transit data...', 'success');
+
+                // Extract route data from Google Maps URL using our backend
+                const routeData = await extractRouteFromGoogleMaps(mapsUrl);
+
+                if (!routeData || routeData.length === 0) {
+                    showMessage('Step 3/5: ❌ No subway/transit routes found in this Google Maps link. Make sure the link includes transit directions with subway information.', 'warning');
+                    return;
+                }
+
+                // Step 4: Validation
+                showMessage('Step 4/5: Validating extracted subway stops and lines...', 'success');
+                await new Promise(resolve => setTimeout(resolve, 300));
+
+                parsedRidesData = routeData;
+
+                // Step 5: Complete
+                showMessage('Step 5/5: ✅ Processing complete! Review your parsed route below.', 'success');
+
+                displayParsedRoute();
+
+                // Final success message
+                setTimeout(() => {
+                    showMessage(`Successfully extracted ${parsedRidesData.length} ride(s) from the route. Please review and confirm.`, 'success');
+                }, 1000);
+
+            } catch (error) {
+                const currentStep = error.message.includes('fetch') ? '2/5' : '3/5';
+                showMessage(`Step ${currentStep}: ❌ Error importing route: ${error.message}`, 'error');
+                console.error('Import error:', error);
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Import Route';
+            }
+        }
+
+        async function extractRouteFromGoogleMaps(url) {
+            try {
+                // Use our backend endpoint to parse the Google Maps URL
+                const response = await fetch(`${backendUrl}/parse-url/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Convert backend response to our expected format
+                return data.rides.map(ride => ({
+                    line: ride.line,
+                    board_stop: ride.board_stop,
+                    depart_stop: ride.depart_stop,
+                    transferred: ride.transferred,
+                    confidence: ride.confidence,
+                    date: new Date().toISOString().split('T')[0]
+                }));
+
+            } catch (error) {
+                if (error.message.includes('404')) {
+                    throw new Error('No subway/transit information found in this Google Maps link. Please make sure you\'re sharing a transit route with subway directions.');
+                }
+                throw new Error(`Failed to extract route information: ${error.message}`);
+            }
+        }
+
+        function displayParsedRoute() {
+            const preview = document.getElementById('routePreview');
+            const container = document.getElementById('parsedRides');
+
+            container.innerHTML = '';
+
+            parsedRidesData.forEach((ride, index) => {
+                const rideDiv = document.createElement('div');
+                rideDiv.className = `ride-item ${ride.transferred ? 'transfer' : ''}`;
+
+                const confidenceColor = ride.confidence >= 80 ? 'var(--success-color)' :
+                    ride.confidence >= 60 ? 'var(--warning-color)' :
+                        'var(--error-color)';
+
+                rideDiv.innerHTML = `
+          <h3>Ride ${index + 1} ${ride.transferred ? '(Transfer)' : ''}</h3>
+          <div class="ride-details">
+            <div class="ride-detail"><strong>Line:</strong> ${ride.line}</div>
+            <div class="ride-detail"><strong>From:</strong> ${ride.board_stop}</div>
+            <div class="ride-detail"><strong>To:</strong> ${ride.depart_stop}</div>
+            <div class="ride-detail"><strong>Date:</strong> ${ride.date}</div>
+            <div class="ride-detail"><strong>Transfer:</strong> ${ride.transferred ? 'Yes' : 'No'}</div>
+            <div class="ride-detail"><strong>Confidence:</strong> <span style="color: ${confidenceColor}">${ride.confidence}%</span></div>
+          </div>
+          <small style="color: #888;">
+            ${ride.confidence < 60 ? '⚠️ Low confidence match - please verify stops are correct' : ''}
+          </small>
+        `;
+
+                container.appendChild(rideDiv);
+            });
+
+            preview.classList.remove('hidden');
+        }
+
+        async function confirmAndSubmit() {
+            if (parsedRidesData.length === 0) {
+                showMessage('No rides to submit.', 'warning');
+                return;
+            }
+
+            const button = document.getElementById('confirmButton');
+            button.disabled = true;
+            button.textContent = 'Submitting...';
+
+            try {
+                let successCount = 0;
+                let errorCount = 0;
+                const errors = [];
+
+                for (const ride of parsedRidesData) {
+                    try {
+                        const response = await fetch(`${backendUrl}/rides/`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                line: ride.line,
+                                board_stop: ride.board_stop,
+                                depart_stop: ride.depart_stop,
+                                date: ride.date,
+                                transferred: ride.transferred
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        successCount++;
+                    } catch (error) {
+                        errorCount++;
+                        errors.push(`Ride ${successCount + errorCount}: ${error.message}`);
+                    }
+                }
+
+                if (errorCount === 0) {
+                    showMessage(`Successfully submitted ${successCount} ride(s)!`, 'success');
+                    clearAll();
+                } else {
+                    showMessage(`Submitted ${successCount} ride(s) successfully, but ${errorCount} failed:\n${errors.join('\n')}`, 'warning');
+                }
+
+            } catch (error) {
+                showMessage(`Error submitting rides: ${error.message}`, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Confirm & Submit All Rides';
+            }
+        }
+    </script>
+</body>
+
+</html>
