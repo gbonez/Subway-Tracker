@@ -513,7 +513,7 @@ def export_rides_csv(db: Session = Depends(get_db)):
         ])
     output.seek(0)
     return StreamingResponse(
-        output,
+        StringIO(output.getvalue()),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=rides.csv"}
     )
