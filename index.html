@@ -361,17 +361,20 @@
 
           const data = await res.json();
           console.log("📊 Received data:", data);
-          console.log("📊 Data length:", data.length);
+          
+          // Extract rides array from the response object
+          const ridesArray = data.rides || data;
+          console.log("📊 Rides array length:", ridesArray.length);
 
-          allRides = data;
+          allRides = ridesArray;
           sortRides();
           currentPage = 1;
 
-          if (data.length === 0) {
+          if (ridesArray.length === 0) {
             messageDiv.textContent = "No rides found in database. Add some rides first!";
             messageDiv.style.color = "#ffd700";
           } else {
-            messageDiv.textContent = `Loaded ${data.length} rides from database ✅`;
+            messageDiv.textContent = `Loaded ${ridesArray.length} rides from database ✅`;
             messageDiv.style.color = "#90ee90";
           }
         } catch (err) {

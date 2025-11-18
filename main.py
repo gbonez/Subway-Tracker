@@ -119,9 +119,9 @@ def normalize_stop_name(stop_name: str) -> str:
             .strip()
             .title())
 
-def extract_transit_info_from_url(url: str) -> List[ParsedRide]:
+async def extract_transit_info_from_url(url: str) -> List[ParsedRide]:
     """Extract transit information from Google Maps URL using headless browser"""
-    return asyncio.run(extract_transit_info_async(url))
+    return await extract_transit_info_async(url)
 
 async def extract_transit_info_async(url: str) -> List[ParsedRide]:
     """Async function to extract transit info using Playwright headless browser"""
@@ -453,13 +453,13 @@ async def parse_google_maps_url(request: UrlParseRequest):
     try:
         print(f"Received URL: {request.url}")
         
-        # Extract transit information
-        rides = extract_transit_info_from_url(request.url)
+        # Extract transit information using await instead of asyncio.run
+        rides = await extract_transit_info_from_url(request.url)
         
         if not rides:
             raise HTTPException(status_code=400, detail="No transit information found in the provided URL. Please ensure the URL contains subway/transit directions.")
         
-        return {"rides": rides}
+        return {"rides": [ride.dict() for ride in rides]}
         
     except HTTPException:
         raise
