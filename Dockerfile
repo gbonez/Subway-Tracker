@@ -38,8 +38,8 @@ RUN python -m playwright install chromium
 # Copy application code
 COPY . .
 
-# Expose port
+# Expose port (Railway will set the PORT environment variable)
 EXPOSE 8000
 
-# Start the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the application with dynamic port
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
