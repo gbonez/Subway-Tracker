@@ -1,6 +1,10 @@
 FROM python:3.12-slim
 
-# Install dependencies for Playwright browsers
+# Install # Install Playwright browsers
+RUN python -m playwright install chromium
+RUN python -m playwright install-deps
+
+# Copy your codedencies for Playwright browsers
 RUN apt-get update && apt-get install -y \
     wget \
     curl \
@@ -34,6 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install Playwright browsers
 RUN python -m playwright install chromium
 
+RUN python -m playwright install-deps
 # Copy your code
 COPY . .
 
