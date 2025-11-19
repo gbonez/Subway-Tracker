@@ -182,8 +182,19 @@ async def extract_transit_info_async(url: str) -> List[ParsedRide]:
                 
                 print("📄 Navigating to Google Maps URL...")
                 
-                # Navigate to the URL with timeout
-                await page.goto(url, wait_until='networkidle', timeout=30000)
+                # Navigate to the URL with more lenient timeout and wait conditions
+                try:
+                    # First try with domcontentloaded (faster)
+                    await page.goto(url, wait_until='domcontentloaded', timeout=20000)
+                    print("✅ Page DOM loaded, waiting for content...")
+                    
+                    # Give it a moment for JavaScript to initialize
+                    await page.wait_for_timeout(3000)
+                    
+                except Exception as nav_error:
+                    print(f"⚠️ DOM load failed ({nav_error}), trying with basic load...")
+                    # Fallback: try with just 'load' event
+                    await page.goto(url, wait_until='load', timeout=15000)
                 
                 # Wait for transit directions to load
                 print("⏳ Waiting for transit directions to load...")
@@ -191,37 +202,74 @@ async def extract_transit_info_async(url: str) -> List[ParsedRide]:
                 # Try multiple selectors that Google Maps might use for transit directions
                 transit_selectors = [
                     '[data-value="Transit"]',
-                    '[aria-label*="transit"]',
+                    '[aria-label*="transit"]', 
                     '[data-trip-index]',
                     '.transit-route-segment',
                     '[jsaction*="directions"]',
                     '.directions-step',
                     '.transit-line',
+                    'div[role="main"]',  # Main content area
+                    '[data-value]',      # Any data-value elements
                 ]
                 
-                # Wait for any transit-related element to appear
-                try:
-                    await page.wait_for_selector(','.join(transit_selectors), timeout=10000)
-                    print("✅ Transit directions loaded successfully")
-                except:
-                    print("⚠️ Transit directions may not have loaded, proceeding with extraction...")
+                # Wait for any transit-related element to appear (with shorter timeout)
+                page_ready = False
+                for selector in transit_selectors:
+                    try:
+                        await page.wait_for_selector(selector, timeout=3000)
+                        print(f"✅ Found element: {selector}")
+                        page_ready = True
+                        break
+                    except:
+                        continue
+                
+                if not page_ready:
+                    print("⚠️ No specific transit elements found, but proceeding with extraction...")
+                    # Give the page more time to load content
+                    await page.wait_for_timeout(5000)
                 
                 # Extract transit information using multiple strategies
                 print("🔍 Extracting transit route information...")
+                
+                # First, let's see what's actually on the page
+                page_title = await page.title()
+                page_url = page.url
+                print(f"📋 Page title: {page_title}")
+                print(f"🔗 Current URL: {page_url}")
                 
                 # Strategy 1: Look for transit route segments
                 route_segments = await page.evaluate("""
                     () => {
                         const segments = [];
                         
+                        // Log what elements we can find
+                        console.log('=== Page Analysis ===');
+                        console.log('Document ready state:', document.readyState);
+                        console.log('Document title:', document.title);
+                        
                         // Look for transit route information in various formats
                         const transitElements = document.querySelectorAll(
-                            '[data-trip-index], .transit-route-segment, .directions-step, [aria-label*="subway"], [aria-label*="train"], [aria-label*="transit"]'
+                            '[data-trip-index], .transit-route-segment, .directions-step, [aria-label*="subway"], [aria-label*="train"], [aria-label*="transit"], [data-value], div[role="main"]'
                         );
                         
-                        transitElements.forEach(element => {
+                        console.log('Found transit-like elements:', transitElements.length);
+                        
+                        transitElements.forEach((element, index) => {
                             const text = element.innerText || element.textContent || '';
                             const ariaLabel = element.getAttribute('aria-label') || '';
+                            const dataAttrs = Array.from(element.attributes)
+                                .filter(attr => attr.name.startsWith('data-'))
+                                .map(attr => `${attr.name}="${attr.value}"`).join(' ');
+                            
+                            // Log first few elements for debugging
+                            if (index < 5) {
+                                console.log(`Element ${index}:`, {
+                                    tag: element.tagName,
+                                    text: text.slice(0, 100),
+                                    ariaLabel: ariaLabel.slice(0, 100),
+                                    dataAttrs: dataAttrs
+                                });
+                            }
                             
                             // Look for subway line patterns (letters/numbers)
                             const lineMatches = text.match(/\\b([0-9A-Z])\\s*(?:line|train|subway)/i) || 
@@ -241,6 +289,7 @@ async def extract_transit_info_async(url: str) -> List[ParsedRide]:
                             }
                         });
                         
+                        console.log('=== End Analysis ===');
                         return segments;
                     }
                 """)
