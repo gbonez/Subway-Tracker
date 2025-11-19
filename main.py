@@ -173,13 +173,12 @@ async def extract_transit_info_async(url: str) -> List[ParsedRide]:
             )
             
             try:
-                page = await browser.new_page()
-                
-                # Set a realistic user agent to avoid detection
-                await page.set_user_agent(
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-                    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                # Create browser context with user agent
+                context = await browser.new_context(
+                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+                              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
+                page = await context.new_page()
                 
                 print("📄 Navigating to Google Maps URL...")
                 
