@@ -20,9 +20,9 @@ from services.transit_service import extract_transit_info_with_api, ParsedRide
 # -------------------------------
 class RideCreate(BaseModel):
     line: str
-    boarding_stop: str
-    departing_stop: str
-    ride_date: date
+    board_stop: str
+    depart_stop: str
+    date: date
     transferred: bool = False
 
 class UrlParseRequest(BaseModel):
@@ -106,19 +106,25 @@ async def suggest_stations(request: SuggestStationsRequest):
 
 async def add_test_data(db: Session = Depends(get_db)):
     """Add test data to the database"""
+    # Get the next ride numbers
+    max_ride = db.query(func.max(SubwayRide.ride_number)).scalar()
+    next_ride_number = (max_ride or 0) + 1
+    
     test_rides = [
         SubwayRide(
+            ride_number=next_ride_number,
             line="1",
-            boarding_stop="Times Sq-42 St",
-            departing_stop="14 St",
-            ride_date=date.today(),
+            board_stop="Times Sq-42 St",
+            depart_stop="14 St",
+            date=date.today(),
             transferred=False
         ),
         SubwayRide(
+            ride_number=next_ride_number + 1,
             line="N",
-            boarding_stop="14 St-Union Sq",
-            departing_stop="Canal St",
-            ride_date=date.today(),
+            board_stop="14 St-Union Sq",
+            depart_stop="Canal St",
+            date=date.today(),
             transferred=True
         )
     ]
@@ -135,11 +141,16 @@ async def add_test_data(db: Session = Depends(get_db)):
 async def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
     """Create a new subway ride"""
     try:
+        # Get the next ride number
+        max_ride = db.query(func.max(SubwayRide.ride_number)).scalar()
+        next_ride_number = (max_ride or 0) + 1
+        
         db_ride = SubwayRide(
+            ride_number=next_ride_number,
             line=ride.line,
-            boarding_stop=ride.boarding_stop,
-            departing_stop=ride.departing_stop,
-            ride_date=ride.ride_date,
+            board_stop=ride.board_stop,
+            depart_stop=ride.depart_stop,
+            date=ride.date,
             transferred=ride.transferred
         )
         db.add(db_ride)
@@ -151,10 +162,11 @@ async def create_ride(ride: RideCreate, db: Session = Depends(get_db)):
             "ride_id": db_ride.id,
             "ride": {
                 "id": db_ride.id,
+                "ride_number": db_ride.ride_number,
                 "line": db_ride.line,
-                "boarding_stop": db_ride.boarding_stop,
-                "departing_stop": db_ride.departing_stop,
-                "ride_date": db_ride.ride_date.isoformat(),
+                "board_stop": db_ride.board_stop,
+                "depart_stop": db_ride.depart_stop,
+                "date": db_ride.date.isoformat(),
                 "transferred": db_ride.transferred
             }
         }
@@ -182,9 +194,9 @@ async def parse_url(request: UrlParseRequest):
             "rides": [
                 {
                     "line": ride.line,
-                    "boarding_stop": ride.boarding_stop,
-                    "departing_stop": ride.departing_stop,
-                    "ride_date": ride.ride_date.isoformat(),
+                    "board_stop": ride.boarding_stop,
+                    "depart_stop": ride.departing_stop,
+                    "date": ride.ride_date.isoformat(),
                     "transferred": ride.transferred
                 }
                 for ride in parsed_rides
@@ -208,9 +220,9 @@ async def get_rides(
         # Get total count
         total = db.query(func.count(SubwayRide.id)).scalar()
         
-        # Get rides with pagination
+        # Get rides with pagination  
         rides = db.query(SubwayRide)\
-                 .order_by(SubwayRide.ride_date.desc(), SubwayRide.id.desc())\
+                 .order_by(SubwayRide.ride_number.desc(), SubwayRide.id.desc())\
                  .offset(offset)\
                  .limit(per_page)\
                  .all()
@@ -219,10 +231,11 @@ async def get_rides(
             "rides": [
                 {
                     "id": ride.id,
+                    "ride_number": ride.ride_number,
                     "line": ride.line,
-                    "boarding_stop": ride.boarding_stop,
-                    "departing_stop": ride.departing_stop,
-                    "ride_date": ride.ride_date.isoformat(),
+                    "board_stop": ride.board_stop,
+                    "depart_stop": ride.depart_stop,
+                    "date": ride.date.isoformat(),
                     "transferred": ride.transferred
                 }
                 for ride in rides
@@ -250,23 +263,23 @@ async def delete_all_rides(db: Session = Depends(get_db)):
 async def export_rides_csv(db: Session = Depends(get_db)):
     """Export all rides to CSV"""
     try:
-        rides = db.query(SubwayRide).order_by(SubwayRide.ride_date.desc()).all()
+        rides = db.query(SubwayRide).order_by(SubwayRide.ride_number.desc()).all()
         
         # Create CSV in memory
         output = StringIO()
         writer = csv.writer(output)
         
         # Write header
-        writer.writerow(['ID', 'Line', 'Boarding Stop', 'Departing Stop', 'Date', 'Transferred'])
+        writer.writerow(['Ride #', 'Line', 'Boarding Stop', 'Departing Stop', 'Date', 'Transferred'])
         
         # Write data
         for ride in rides:
             writer.writerow([
-                ride.id,
+                ride.ride_number,
                 ride.line,
-                ride.boarding_stop,
-                ride.departing_stop,
-                ride.ride_date.isoformat(),
+                ride.board_stop,
+                ride.depart_stop,
+                ride.date.isoformat(),
                 'Yes' if ride.transferred else 'No'
             ])
         

@@ -53,8 +53,9 @@ class SubwayRide(Base):
     __tablename__ = "rides"
     
     id = Column(Integer, primary_key=True, index=True)
-    line = Column(String, index=True)
-    boarding_stop = Column(String)
-    departing_stop = Column(String)
-    ride_date = Column(Date)
+    ride_number = Column(Integer, nullable=False)
+    line = Column(String, nullable=False)
+    board_stop = Column(String, nullable=False)
+    depart_stop = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
     transferred = Column(Boolean, default=False)
