@@ -576,10 +576,7 @@ function updateVisitedStopsChart(data, rides) {
     charts.visitedStops = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: top10Data.map(item => {
-                const lines = item.lines.join('/');
-                return lines ? `${item.stop_name} (${lines})` : item.stop_name;
-            }),
+            labels: top10Data.map(item => item.stop_name),
             datasets: [{
                 label: 'Visits',
                 data: top10Data.map(item => item.count),
@@ -594,6 +591,19 @@ function updateVisitedStopsChart(data, rides) {
             plugins: {
                 legend: {
                     display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function (tooltipItems) {
+                            const index = tooltipItems[0].dataIndex;
+                            const item = top10Data[index];
+                            const lines = item.lines.join('/');
+                            return `${item.stop_name}${lines ? ` (${lines})` : ''}`;
+                        },
+                        label: function (context) {
+                            return `Visits: ${context.parsed.y}`;
+                        }
+                    }
                 }
             },
             scales: {
@@ -659,10 +669,7 @@ function updateTransferStopsChart(data, rides) {
     charts.transferStops = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: top10Data.map(item => {
-                const lines = item.lines.join('/');
-                return lines ? `${item.stop_name} (${lines})` : item.stop_name;
-            }),
+            labels: top10Data.map(item => item.stop_name),
             datasets: [{
                 label: 'Transfers',
                 data: top10Data.map(item => item.count),
@@ -677,6 +684,19 @@ function updateTransferStopsChart(data, rides) {
             plugins: {
                 legend: {
                     display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function (tooltipItems) {
+                            const index = tooltipItems[0].dataIndex;
+                            const item = top10Data[index];
+                            const lines = item.lines.join('/');
+                            return `${item.stop_name}${lines ? ` (${lines})` : ''}`;
+                        },
+                        label: function (context) {
+                            return `Transfers: ${context.parsed.y}`;
+                        }
+                    }
                 }
             },
             scales: {
