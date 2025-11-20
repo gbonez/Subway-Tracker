@@ -12,7 +12,6 @@ from models import get_db
 from utils.helpers import install_playwright_browsers, get_app_port
 from controllers.ride_controller import (
     get_root,
-    test_db_connection,
     debug_url_parsing,
     suggest_stations,
     add_test_data,
@@ -68,7 +67,6 @@ def register_routes(app: FastAPI):
     
     # Basic routes
     app.get("/")(get_root)
-    app.get("/test-db")(test_db_connection)
     app.get("/debug-url-parsing")(debug_url_parsing)
     
     # Ride management routes

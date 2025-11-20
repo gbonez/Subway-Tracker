@@ -39,23 +39,6 @@ async def get_root():
     """Root endpoint"""
     return {"message": "🚇 NYC Subway Tracker API is running!"}
 
-async def test_db_connection(db: Session = Depends(get_db)):
-    """Test database connection"""
-    try:
-        # Test query
-        result = db.execute("SELECT 1").fetchone()
-        
-        # Count rides
-        ride_count = db.query(func.count(SubwayRide.id)).scalar()
-        
-        return {
-            "status": "connected",
-            "message": "Database connection successful! 🐘",
-            "total_rides": ride_count
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
-
 async def debug_url_parsing():
     """Debug endpoint for URL parsing"""
     test_urls = [

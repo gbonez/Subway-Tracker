@@ -280,11 +280,6 @@
           const healthRes = await fetch(`${backendUrl}/`);
           const healthData = await healthRes.json();
           console.log("✅ Backend health check:", healthData);
-
-          // Test database connectivity
-          const dbRes = await fetch(`${backendUrl}/test-db`);
-          const dbData = await dbRes.json();
-          console.log("🐘 Database test:", dbData);
         } catch (err) {
           console.error("❌ Backend connectivity failed:", err);
           messageDiv.textContent = `Cannot connect to backend: ${err.message}`;
