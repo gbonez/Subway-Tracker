@@ -299,6 +299,12 @@
           lineSelect.appendChild(opt);
         });
 
+        // Set date input to current date
+        const rideDateInput = document.getElementById('rideDate');
+        const today = new Date();
+        const currentDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        rideDateInput.value = currentDate;
+
         fetchRides();
       });
 

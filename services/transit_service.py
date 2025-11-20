@@ -313,8 +313,8 @@ async def extract_transit_info_with_new_api(url: str) -> List[ParsedRide]:
         for ride in api_rides:
             parsed_ride = ParsedRide(
                 line=ride["line"],
-                boarding_stop=ride["board_stop"],  # API returns "board_stop", model expects "boarding_stop"
-                departing_stop=ride["depart_stop"],  # API returns "depart_stop", model expects "departing_stop"
+                boarding_stop=ride["board_stop"],  # Correct mapping: API "board_stop" -> model "boarding_stop"
+                departing_stop=ride["depart_stop"],  # Correct mapping: API "depart_stop" -> model "departing_stop"
                 ride_date=date.today(),
                 transferred=False
             )

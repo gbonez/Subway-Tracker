@@ -457,10 +457,6 @@
                 rideDiv.className = `ride-item ${ride.transferred ? 'transfer' : ''}`;
                 rideDiv.setAttribute('data-ride-index', index);
 
-                const confidenceColor = ride.confidence >= 80 ? 'var(--success-color)' :
-                    ride.confidence >= 60 ? 'var(--warning-color)' :
-                        'var(--error-color)';
-
                 rideDiv.innerHTML = `
                     <div class="ride-counter">${index + 1}</div>
                     <div class="ride-display" id="display-${index}">
@@ -469,12 +465,9 @@
                             <div class="ride-detail"><strong>Line:</strong> ${ride.line}</div>
                             <div class="ride-detail"><strong>From:</strong> ${ride.board_stop}</div>
                             <div class="ride-detail"><strong>To:</strong> ${ride.depart_stop}</div>
+                            <div class="ride-detail"><strong>Date:</strong> ${ride.date || 'Not set'}</div>
                             <div class="ride-detail"><strong>Transfer:</strong> ${ride.transferred ? 'Yes' : 'No'}</div>
-                            <div class="ride-detail"><strong>Confidence:</strong> <span style="color: ${confidenceColor}">${ride.confidence}%</span></div>
                         </div>
-                        <small style="color: #888;">
-                            ${ride.confidence < 60 ? '⚠️ Low confidence match - please verify stops are correct' : ''}
-                        </small>
                     </div>
                     <div class="ride-edit hidden" id="edit-${index}">
                         <h3>Edit Ride ${index + 1}</h3>
@@ -496,6 +489,10 @@
                                 <select id="edit-depart-${index}">
                                     <option value="">Select station</option>
                                 </select>
+                            </div>
+                            <div>
+                                <label>Date:</label>
+                                <input type="date" id="edit-date-${index}" value="${ride.date || ''}" />
                             </div>
                             <div>
                                 <label>Transfer:</label>
@@ -592,11 +589,12 @@
             const lineSelect = document.getElementById(`edit-line-${index}`);
             const boardSelect = document.getElementById(`edit-board-${index}`);
             const departSelect = document.getElementById(`edit-depart-${index}`);
+            const dateInput = document.getElementById(`edit-date-${index}`);
             const transferSelect = document.getElementById(`edit-transfer-${index}`);
 
             // Validate required fields
-            if (!lineSelect.value || !boardSelect.value || !departSelect.value) {
-                showMessage('Please fill in all required fields (Line, From Station, To Station)', 'error');
+            if (!lineSelect.value || !boardSelect.value || !departSelect.value || !dateInput.value) {
+                showMessage('Please fill in all required fields (Line, From Station, To Station, Date)', 'error');
                 return;
             }
 
@@ -606,8 +604,8 @@
                 line: lineSelect.value,
                 board_stop: boardSelect.value,
                 depart_stop: departSelect.value,
-                transferred: transferSelect.value === 'true',
-                confidence: 95 // High confidence for user-edited data
+                date: dateInput.value,
+                transferred: transferSelect.value === 'true'
             };
 
             cancelRideEdit(index);
@@ -650,12 +648,16 @@
         }
 
         function addNewRide(insertIndex) {
+            // Get current date in YYYY-MM-DD format for the database
+            const today = new Date();
+            const currentDate = today.toISOString().split('T')[0];
+
             const newRide = {
                 line: "",
                 board_stop: "",
                 depart_stop: "",
-                transferred: false,
-                confidence: 100 // User-created data
+                date: currentDate, // Default to today's date
+                transferred: false
             };
 
             parsedRidesData.splice(insertIndex, 0, newRide);
