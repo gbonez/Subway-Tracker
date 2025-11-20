@@ -300,6 +300,111 @@
             ]
         };
 
+        // Official MTA line colors
+        const mtaLineColors = {
+            '1': '#EE352E', // Red
+            '2': '#EE352E', // Red
+            '3': '#EE352E', // Red
+            '4': '#00933C', // Green
+            '5': '#00933C', // Green
+            '6': '#00933C', // Green
+            '6X': '#00933C', // Green (6 Express)
+            '7': '#B933AD', // Purple
+            '7X': '#B933AD', // Purple (7 Express)
+            'A': '#0039A6', // Blue
+            'B': '#FF6319', // Orange
+            'C': '#0039A6', // Blue
+            'D': '#FF6319', // Orange
+            'E': '#0039A6', // Blue
+            'F': '#FF6319', // Orange
+            'FX': '#FF6319', // Orange (F Express)
+            'G': '#6CBE45', // Light Green
+            'H': '#0039A6', // Blue (Shuttle)
+            'J': '#996633', // Brown
+            'L': '#A7A9AC', // Gray
+            'M': '#FF6319', // Orange
+            'N': '#FCCC0A', // Yellow
+            'Q': '#FCCC0A', // Yellow
+            'R': '#FCCC0A', // Yellow
+            'S': '#808183', // Gray (Shuttle)
+            'T': '#00ADD0', // Teal
+            'W': '#FCCC0A', // Yellow
+            'Z': '#996633', // Brown
+            'SIR': '#0039A6' // Blue (Staten Island Railway)
+        };
+
+        // Get MTA color for a line
+        function getMTAColor(line) {
+            return mtaLineColors[line] || '#808183'; // Default to gray if line not found
+        }
+
+        // Consolidate stops that serve multiple lines
+        function consolidateStopsByLines(stopData, rides) {
+            const consolidatedStops = {};
+            const stopLineUsage = {};
+
+            // First, track which lines are used at each stop and how frequently
+            rides.forEach(ride => {
+                const boardStop = ride.board_stop;
+                const departStop = ride.depart_stop;
+                const line = ride.line;
+
+                [boardStop, departStop].forEach(stop => {
+                    if (stop) {
+                        if (!stopLineUsage[stop]) {
+                            stopLineUsage[stop] = {};
+                        }
+                        stopLineUsage[stop][line] = (stopLineUsage[stop][line] || 0) + 1;
+                    }
+                });
+            });
+
+            // Process the stop data and consolidate
+            stopData.forEach(item => {
+                const stopName = item.stop_name;
+                const count = item.visit_count || item.transfer_count;
+
+                // Find the most frequently used line at this stop
+                let primaryLine = null;
+                let maxUsage = 0;
+
+                if (stopLineUsage[stopName]) {
+                    for (const [line, usage] of Object.entries(stopLineUsage[stopName])) {
+                        if (usage > maxUsage) {
+                            maxUsage = usage;
+                            primaryLine = line;
+                        }
+                    }
+                }
+
+                // Use the primary line or default
+                const lineForColor = primaryLine || 'S'; // Default to shuttle gray
+
+                if (!consolidatedStops[stopName]) {
+                    consolidatedStops[stopName] = {
+                        stop_name: stopName,
+                        count: count,
+                        primary_line: lineForColor,
+                        lines: stopLineUsage[stopName] ? Object.keys(stopLineUsage[stopName]) : [],
+                        color: getMTAColor(lineForColor)
+                    };
+                } else {
+                    // This shouldn't happen in our current data structure, but just in case
+                    consolidatedStops[stopName].count += count;
+                }
+            });
+
+            return Object.values(consolidatedStops).sort((a, b) => b.count - a.count);
+        }
+
+        // Consolidate line data and get colors
+        function processLineData(lineData) {
+            return lineData.map(item => ({
+                ...item,
+                color: getMTAColor(item.line)
+            }));
+        }
+
         // Initialize page
         document.addEventListener('DOMContentLoaded', async () => {
             setupFilterButtons();
@@ -434,8 +539,8 @@
 
                 // Update charts immediately - no delay needed since we're ensuring elements exist
                 console.log('🎨 Starting chart updates...');
-                updateVisitedStopsChart(visitedStops);
-                updateTransferStopsChart(transferStops);
+                updateVisitedStopsChart(visitedStops, ridesArray);
+                updateTransferStopsChart(transferStops, ridesArray);
                 updatePopularLinesChart(popularLines);
                 updateRidesOverTimeChart(ridesArray);
                 console.log('🎨 Chart updates completed');
@@ -564,7 +669,7 @@
         }
 
         // Update visited stops chart
-        function updateVisitedStopsChart(data) {
+        function updateVisitedStopsChart(data, rides) {
             const chartElement = document.getElementById('visitedStopsChart');
             if (!chartElement) {
                 console.error('❌ visitedStopsChart element not found after ensureCanvasElements');
@@ -587,6 +692,10 @@
                 return;
             }
 
+            // Consolidate stops and get colors
+            const consolidatedData = consolidateStopsByLines(data, rides);
+            const top10Data = consolidatedData.slice(0, 10);
+
             const ctx = chartElement.getContext('2d');
             if (!ctx) {
                 console.error('❌ Could not get canvas context for visitedStopsChart');
@@ -596,12 +705,15 @@
             charts.visitedStops = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.stop_name || 'Unknown'),
+                    labels: top10Data.map(item => {
+                        const lines = item.lines.join('/');
+                        return lines ? `${item.stop_name} (${lines})` : item.stop_name;
+                    }),
                     datasets: [{
                         label: 'Visits',
-                        data: data.slice(0, 10).map(item => item.visit_count || 0),
-                        backgroundColor: colors.gradient,
-                        borderColor: colors.primary,
+                        data: top10Data.map(item => item.count),
+                        backgroundColor: top10Data.map(item => item.color),
+                        borderColor: top10Data.map(item => item.color),
                         borderWidth: 1
                     }]
                 },
@@ -640,7 +752,7 @@
         }
 
         // Update transfer stops chart
-        function updateTransferStopsChart(data) {
+        function updateTransferStopsChart(data, rides) {
             const chartElement = document.getElementById('transferStopsChart');
             if (!chartElement) {
                 console.error('❌ transferStopsChart element not found after ensureCanvasElements');
@@ -663,6 +775,10 @@
                 return;
             }
 
+            // Consolidate stops and get colors
+            const consolidatedData = consolidateStopsByLines(data, rides);
+            const top10Data = consolidatedData.slice(0, 10);
+
             const ctx = chartElement.getContext('2d');
             if (!ctx) {
                 console.error('❌ Could not get canvas context for transferStopsChart');
@@ -672,12 +788,15 @@
             charts.transferStops = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.stop_name || 'Unknown'),
+                    labels: top10Data.map(item => {
+                        const lines = item.lines.join('/');
+                        return lines ? `${item.stop_name} (${lines})` : item.stop_name;
+                    }),
                     datasets: [{
                         label: 'Transfers',
-                        data: data.slice(0, 10).map(item => item.transfer_count || 0),
-                        backgroundColor: colors.gradient,
-                        borderColor: colors.secondary,
+                        data: top10Data.map(item => item.count),
+                        backgroundColor: top10Data.map(item => item.color),
+                        borderColor: top10Data.map(item => item.color),
                         borderWidth: 1
                     }]
                 },
@@ -739,6 +858,10 @@
                 return;
             }
 
+            // Process line data to add colors
+            const processedData = processLineData(data);
+            const top10Data = processedData.slice(0, 10);
+
             const ctx = chartElement.getContext('2d');
             if (!ctx) {
                 console.error('❌ Could not get canvas context for popularLinesChart');
@@ -748,12 +871,12 @@
             charts.popularLines = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.line || 'Unknown'),
+                    labels: top10Data.map(item => item.line || 'Unknown'),
                     datasets: [{
                         label: 'Rides',
-                        data: data.slice(0, 10).map(item => item.ride_count || 0),
-                        backgroundColor: colors.gradient,
-                        borderColor: colors.accent,
+                        data: top10Data.map(item => item.ride_count || 0),
+                        backgroundColor: top10Data.map(item => item.color),
+                        borderColor: top10Data.map(item => item.color),
                         borderWidth: 1
                     }]
                 },
