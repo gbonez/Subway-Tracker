@@ -11,12 +11,16 @@ import csv
 import os
 import requests
 import re
-from urllib.parse import urlparse, unquote
+import json
+from urllib.parse import urlparse, unquote, parse_qs
 from typing import List
 import asyncio
 import subprocess
 import sys
 from playwright.async_api import async_playwright
+
+# Google Maps API Configuration
+GOOGLE_MAPS_API_KEY = "AIzaSyDAHi8BNX3Fp3WxcOtAWg1fuzBWSBB7J4w"
 
 # -------------------------------
 # PLAYWRIGHT SETUP
@@ -149,8 +153,230 @@ def normalize_stop_name(stop_name: str) -> str:
             .title())
 
 async def extract_transit_info_from_url(url: str) -> List[ParsedRide]:
-    """Extract transit information from Google Maps URL using headless browser"""
+    """Extract transit information from Google Maps URL using API or browser fallback"""
+    # First try Google Maps API
+    api_result = await extract_transit_info_with_api(url)
+    if api_result:
+        return api_result
+    
+    # Fallback to browser scraping if API fails
+    print("🔄 API extraction failed, falling back to browser scraping...")
     return await extract_transit_info_async(url)
+
+async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
+    """Extract transit information using Google Maps Directions API"""
+    rides = []
+    
+    try:
+        print(f"🗺️ Using Google Maps API to extract transit info from: {url}")
+        
+        # Parse the Google Maps URL to extract origin and destination
+        origin, destination = parse_google_maps_url(url)
+        if not origin or not destination:
+            print("❌ Could not parse origin/destination from URL")
+            return []
+        
+        print(f"📍 Origin: {origin}")
+        print(f"🎯 Destination: {destination}")
+        
+        # Call Google Maps Directions API
+        directions_url = "https://maps.googleapis.com/maps/api/directions/json"
+        params = {
+            'origin': origin,
+            'destination': destination,
+            'mode': 'transit',
+            'transit_mode': 'subway',
+            'alternatives': 'true',
+            'key': GOOGLE_MAPS_API_KEY
+        }
+        
+        print("🌐 Calling Google Maps Directions API...")
+        response = requests.get(directions_url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data['status'] != 'OK':
+            print(f"❌ Google Maps API error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
+            return []
+        
+        print(f"✅ Found {len(data.get('routes', []))} route(s)")
+        
+        # Process the routes to extract subway rides
+        rides = process_api_routes(data.get('routes', []))
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error calling Google Maps API: {str(e)}")
+    except Exception as e:
+        print(f"❌ Error processing Google Maps API response: {str(e)}")
+    
+    return rides
+
+def parse_google_maps_url(url: str) -> tuple:
+    """Parse Google Maps URL to extract origin and destination"""
+    try:
+        # Handle different Google Maps URL formats
+        parsed_url = urlparse(url)
+        
+        # Method 1: Check query parameters
+        query_params = parse_qs(parsed_url.query)
+        
+        # Look for 'saddr' (source address) and 'daddr' (destination address)
+        if 'saddr' in query_params and 'daddr' in query_params:
+            origin = query_params['saddr'][0]
+            destination = query_params['daddr'][0]
+            return origin, destination
+        
+        # Method 2: Check for directions in path
+        if '/dir/' in parsed_url.path:
+            # Extract coordinates or addresses from the path
+            path_parts = parsed_url.path.split('/dir/')[1].split('/')
+            if len(path_parts) >= 2:
+                origin = unquote(path_parts[0])
+                destination = unquote(path_parts[1])
+                return origin, destination
+        
+        # Method 3: Look for coordinates in fragment or query
+        fragment = parsed_url.fragment or ""
+        if '!1m' in fragment:
+            # Extract coordinates from the complex fragment format
+            coords = extract_coords_from_fragment(fragment)
+            if coords:
+                return coords
+        
+        # Method 4: Check for data parameter with coordinates
+        if 'data' in query_params:
+            coords = extract_coords_from_data(query_params['data'][0])
+            if coords:
+                return coords
+        
+        print("❌ Could not extract origin/destination from URL format")
+        return None, None
+        
+    except Exception as e:
+        print(f"❌ Error parsing Google Maps URL: {str(e)}")
+        return None, None
+
+def extract_coords_from_fragment(fragment: str) -> tuple:
+    """Extract coordinates from Google Maps fragment"""
+    try:
+        # Look for coordinate patterns in the fragment
+        import re
+        coord_pattern = r'(-?\d+\.\d+),(-?\d+\.\d+)'
+        matches = re.findall(coord_pattern, fragment)
+        
+        if len(matches) >= 2:
+            # First match is typically origin, second is destination
+            origin = f"{matches[0][0]},{matches[0][1]}"
+            destination = f"{matches[1][0]},{matches[1][1]}"
+            return origin, destination
+        
+        return None, None
+    except:
+        return None, None
+
+def extract_coords_from_data(data_param: str) -> tuple:
+    """Extract coordinates from data parameter"""
+    try:
+        # Decode and parse data parameter
+        decoded = unquote(data_param)
+        coord_pattern = r'(-?\d+\.\d+),(-?\d+\.\d+)'
+        matches = re.findall(coord_pattern, decoded)
+        
+        if len(matches) >= 2:
+            origin = f"{matches[0][0]},{matches[0][1]}"
+            destination = f"{matches[1][0]},{matches[1][1]}"
+            return origin, destination
+        
+        return None, None
+    except:
+        return None, None
+
+def process_api_routes(routes: list) -> List[ParsedRide]:
+    """Process Google Maps API route data to extract subway rides"""
+    rides = []
+    
+    try:
+        for route_idx, route in enumerate(routes):
+            print(f"📍 Processing route {route_idx + 1}")
+            
+            legs = route.get('legs', [])
+            for leg_idx, leg in enumerate(legs):
+                print(f"🦵 Processing leg {leg_idx + 1}")
+                
+                steps = leg.get('steps', [])
+                current_line = None
+                current_stations = []
+                
+                for step_idx, step in enumerate(steps):
+                    travel_mode = step.get('travel_mode', '')
+                    
+                    if travel_mode == 'TRANSIT':
+                        transit_details = step.get('transit_details', {})
+                        line_info = transit_details.get('line', {})
+                        
+                        # Extract line information
+                        line_name = line_info.get('short_name') or line_info.get('name', '')
+                        vehicle_type = line_info.get('vehicle', {}).get('type', '')
+                        
+                        # Only process subway/metro lines
+                        if vehicle_type in ['SUBWAY', 'METRO_RAIL'] or 'subway' in line_name.lower():
+                            departure_stop = transit_details.get('departure_stop', {}).get('name', '')
+                            arrival_stop = transit_details.get('arrival_stop', {}).get('name', '')
+                            
+                            print(f"🚇 Found subway step: {line_name} from {departure_stop} to {arrival_stop}")
+                            
+                            # Clean up station names
+                            departure_stop = normalize_stop_name(departure_stop)
+                            arrival_stop = normalize_stop_name(arrival_stop)
+                            
+                            if departure_stop and arrival_stop and line_name:
+                                ride = ParsedRide(
+                                    line=line_name.upper(),
+                                    board_stop=departure_stop,
+                                    depart_stop=arrival_stop,
+                                    transferred=False,  # We'll detect transfers later
+                                    confidence=95  # High confidence from API data
+                                )
+                                rides.append(ride)
+                
+        # Post-process to detect transfers
+        rides = detect_transfers_in_rides(rides)
+        
+        print(f"✅ Extracted {len(rides)} subway rides from API data")
+        
+    except Exception as e:
+        print(f"❌ Error processing API routes: {str(e)}")
+    
+    return rides
+
+def detect_transfers_in_rides(rides: List[ParsedRide]) -> List[ParsedRide]:
+    """Detect transfers between consecutive rides"""
+    for i in range(len(rides) - 1):
+        current_ride = rides[i]
+        next_ride = rides[i + 1]
+        
+        # If current ride's departure stop is the same as next ride's boarding stop,
+        # it's likely a transfer
+        if (current_ride.depart_stop.lower() == next_ride.board_stop.lower() or 
+            similar_station_names(current_ride.depart_stop, next_ride.board_stop)):
+            current_ride.transferred = True
+    
+    return rides
+
+def similar_station_names(name1: str, name2: str) -> bool:
+    """Check if two station names are similar (for transfer detection)"""
+    name1 = name1.lower().replace('-', ' ').replace('/', ' ').strip()
+    name2 = name2.lower().replace('-', ' ').replace('/', ' ').strip()
+    
+    # Remove common suffixes
+    suffixes = ['station', 'st', 'ave', 'avenue', 'sq', 'square']
+    for suffix in suffixes:
+        name1 = name1.replace(f' {suffix}', '').replace(f'{suffix} ', '')
+        name2 = name2.replace(f' {suffix}', '').replace(f'{suffix} ', '')
+    
+    # Check if names are very similar
+    return name1 == name2 or name1 in name2 or name2 in name1
 
 async def extract_transit_info_async(url: str) -> List[ParsedRide]:
     """Async function to extract transit info using Playwright headless browser"""
