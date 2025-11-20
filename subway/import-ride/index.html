@@ -322,6 +322,37 @@
         const backendUrl = `https://subway-tracker-production.up.railway.app`;
         let parsedRidesData = [];
 
+        // Password validation function
+        async function validatePassword(operation = "modify data") {
+            const password = prompt(`Please enter the admin password to ${operation}:`);
+
+            if (!password) {
+                return false; // User cancelled
+            }
+
+            try {
+                const response = await fetch(`${backendUrl}/validate-password`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+
+                if (response.ok) {
+                    return true;
+                } else {
+                    const errorData = await response.json();
+                    alert(`❌ ${errorData.detail || 'Invalid password'}`);
+                    return false;
+                }
+            } catch (error) {
+                console.error("Password validation error:", error);
+                alert(`❌ Error validating password: ${error.message}`);
+                return false;
+            }
+        }
+
         function showMessage(text, type = 'success') {
             const messageArea = document.getElementById('messageArea');
             messageArea.innerHTML = `<div class="message ${type}">${text}</div>`;
@@ -672,6 +703,11 @@
         } async function confirmAndSubmit() {
             if (parsedRidesData.length === 0) {
                 showMessage('No rides to submit.', 'warning');
+                return;
+            }
+
+            // Validate password before submitting rides
+            if (!(await validatePassword(`import ${parsedRidesData.length} ride(s)`))) {
                 return;
             }
 

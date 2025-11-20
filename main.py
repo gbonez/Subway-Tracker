@@ -24,9 +24,11 @@ from controllers.ride_controller import (
     get_visited_stops_stats,
     get_transfer_stops_stats,
     get_popular_lines_stats,
+    validate_password,
     RideCreate,
     UrlParseRequest,
-    SuggestStationsRequest
+    SuggestStationsRequest,
+    PasswordValidationRequest
 )
 
 # -------------------------------
@@ -67,6 +69,9 @@ def register_routes(app: FastAPI):
     # Basic routes
     app.get("/")(get_root)
     app.get("/debug-url-parsing")(debug_url_parsing)
+    
+    # Password validation route
+    app.post("/validate-password")(validate_password)
     
     # Ride management routes
     app.post("/rides/")(create_ride)

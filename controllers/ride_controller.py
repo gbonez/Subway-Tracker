@@ -32,9 +32,26 @@ class SuggestStationsRequest(BaseModel):
     extracted_name: str
     user_feedback: str = ""
 
+class PasswordValidationRequest(BaseModel):
+    password: str
+
 # -------------------------------
 # ROUTE HANDLERS
 # -------------------------------
+async def validate_password(request: PasswordValidationRequest):
+    """Validate user password against DELETE_PASSWORD environment variable"""
+    import os
+    
+    expected_password = os.getenv("DELETE_PASSWORD")
+    
+    if expected_password is None:
+        raise HTTPException(status_code=500, detail="Password protection not configured on server")
+    
+    if request.password != expected_password:
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    return {"valid": True, "message": "Password validated successfully"}
+
 async def get_root():
     """Root endpoint"""
     return {"message": "🚇 NYC Subway Tracker API is running!"}
