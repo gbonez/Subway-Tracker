@@ -23,3 +23,5 @@ build/
 
 # Logs
 *.log
+test_url_parsing_v2.py
+test_url_parsing.py

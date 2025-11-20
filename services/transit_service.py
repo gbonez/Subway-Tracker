@@ -111,42 +111,293 @@ def normalize_stop_name(stop_name: str) -> str:
     return normalized
 
 # -------------------------------
-# GOOGLE MAPS API
+# URL EXPANSION AND COORDINATE EXTRACTION
+# -------------------------------
+def expand_shortened_url(url: str) -> str:
+    """Expand shortened Google Maps URLs to get the full URL with coordinates"""
+    try:
+        # Check if it's a shortened URL
+        if 'maps.app.goo.gl' in url or 'goo.gl' in url:
+            print(f"🔗 Expanding shortened URL: {url}")
+            
+            # Use requests to follow redirects and get the expanded URL
+            response = requests.get(url, allow_redirects=True, timeout=10)
+            expanded_url = response.url
+            print(f"✅ Expanded to: {expanded_url}")
+            return expanded_url
+        else:
+            # URL is already expanded
+            return url
+            
+    except Exception as e:
+        print(f"⚠️ Error expanding URL: {e}")
+        return url  # Return original URL if expansion fails
+
+async def extract_coordinates_from_browser(url: str) -> tuple:
+    """Extract origin and destination coordinates using browser automation"""
+    try:
+        print("🎭 Using browser to extract coordinates...")
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            page = await context.new_page()
+            
+            try:
+                await page.goto(url, wait_until='domcontentloaded', timeout=15000)
+                await asyncio.sleep(3)  # Wait for dynamic content
+                
+                # Try to extract coordinates from the page URL or data
+                current_url = page.url
+                print(f"📍 Current URL after redirect: {current_url}")
+                
+                # Parse coordinates from the redirected URL
+                origin, destination = parse_google_maps_url(current_url)
+                if origin and destination:
+                    return origin, destination
+                
+                # Try to extract from page data attributes or JavaScript
+                coordinates = await page.evaluate("""
+                    () => {
+                        // Look for coordinates in various places
+                        const url = window.location.href;
+                        
+                        // Try to find coordinates in URL
+                        const coordMatches = url.match(/@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)/g);
+                        if (coordMatches && coordMatches.length >= 2) {
+                            const coords1 = coordMatches[0].substring(1).split(',');
+                            const coords2 = coordMatches[1].substring(1).split(',');
+                            return [
+                                [parseFloat(coords1[0]), parseFloat(coords1[1])],
+                                [parseFloat(coords2[0]), parseFloat(coords2[1])]
+                            ];
+                        }
+                        
+                        // Look for direction data in the page
+                        const dirMatch = url.match(/dir\\/([^/]+)\\/([^/]+)/);
+                        if (dirMatch) {
+                            return [decodeURIComponent(dirMatch[1]), decodeURIComponent(dirMatch[2])];
+                        }
+                        
+                        return null;
+                    }
+                """)
+                
+                if coordinates:
+                    print(f"✅ Extracted coordinates from browser: {coordinates}")
+                    return coordinates[0], coordinates[1]
+                
+            finally:
+                await browser.close()
+                
+    except Exception as e:
+        print(f"❌ Browser coordinate extraction error: {e}")
+    
+    return None, None
+
+# -------------------------------
+# GOOGLE MAPS API - NEW SIMPLIFIED APPROACH
+# -------------------------------
+
+def get_transit_rides_from_api(api_key: str, origin: str, destination: str):
+    """
+    Calls Google Directions API and extracts individual transit rides.
+    Returns simplified ride data: board_stop, depart_stop, line
+    """
+    print(f"\n🚇 Calling Google Directions API...")
+    print(f"📍 Origin: {origin}")
+    print(f"📍 Destination: {destination}")
+    
+    url = "https://maps.googleapis.com/maps/api/directions/json"
+
+    params = {
+        "origin": origin,
+        "destination": destination,
+        "mode": "transit",
+        "transit_mode": "subway",
+        "key": api_key,
+        "alternatives": "true"
+    }
+    
+    print(f"🌐 API URL: {url}")
+    print(f"📋 Parameters: {params}")
+
+    resp = requests.get(url, params=params)
+    data = resp.json()
+    
+    print(f"📊 API Response status: {data.get('status')}")
+
+    if data.get("status") != "OK":
+        print("❌ API Error:", data.get("status"), data.get("error_message"))
+        return []
+
+    rides = []
+    routes = data.get("routes", [])
+    print(f"🛣️ Found {len(routes)} route(s)")
+
+    # Use the first route (typically the recommended one)
+    if routes:
+        route = routes[0]
+        print(f"\n🔄 Processing Primary Route:")
+        legs = route.get("legs", [])
+        for leg_idx, leg in enumerate(legs):
+            print(f"  📍 Leg {leg_idx + 1}: {leg.get('start_address')} → {leg.get('end_address')}")
+            steps = leg.get("steps", [])
+            for step_idx, step in enumerate(steps):
+                transit_details = step.get("transit_details")
+                if transit_details:
+                    departure_stop = transit_details["departure_stop"]
+                    arrival_stop = transit_details["arrival_stop"]
+                    line_info = transit_details["line"]
+                    
+                    # Extract simplified ride information matching DB schema
+                    ride = {
+                        "board_stop": departure_stop["name"],
+                        "depart_stop": arrival_stop["name"], 
+                        "line": line_info.get("short_name", line_info.get("name", "Unknown"))
+                    }
+                    rides.append(ride)
+                    print(f"    🚇 Ride: {ride['board_stop']} → {ride['depart_stop']} (Line: {ride['line']})")
+                else:
+                    # Walking step
+                    if step.get("travel_mode") == "WALKING":
+                        print(f"    🚶 Walk: {step.get('html_instructions', 'Walking segment')}")
+
+    return rides
+
+def extract_origin_destination(maps_url: str):
+    """
+    Extracts the origin and destination from a Google Maps URL
+    such as: https://www.google.com/maps/dir/Origin/Destination/
+    """
+    import urllib.parse
+    
+    # URL path after domain
+    parsed = urllib.parse.urlparse(maps_url)
+    path = parsed.path
+    parts = path.split("/")
+    
+    print(f"🗺️ URL path: {path}")
+    print(f"🔍 Path parts: {parts}")
+
+    try:
+        # Find the index of "dir"
+        i = parts.index("dir")
+        origin = urllib.parse.unquote(parts[i + 1])
+        destination = urllib.parse.unquote(parts[i + 2])
+        print(f"📍 Raw origin: {origin}")
+        print(f"📍 Raw destination: {destination}")
+        return origin, destination
+    except (ValueError, IndexError) as e:
+        print(f"❌ Could not parse origin/destination from URL: {e}")
+        raise ValueError("Could not parse origin/destination from URL.")
+
+async def extract_transit_info_with_new_api(url: str) -> List[ParsedRide]:
+    """Extract transit information using simplified Google Maps API approach"""
+    try:
+        # Step 1: Expand shortened URLs if needed
+        expanded_url = expand_shortened_url(url)
+        print(f"🔗 Expanded URL: {expanded_url}")
+        
+        # Step 2: Extract origin and destination from URL
+        origin, destination = extract_origin_destination(expanded_url)
+        
+        print(f"📍 Origin: {origin}")
+        print(f"📍 Destination: {destination}")
+        
+        # Step 3: Get transit rides from API
+        api_rides = get_transit_rides_from_api(GOOGLE_MAPS_API_KEY, origin, destination)
+        
+        # Step 4: Convert to ParsedRide objects with proper schema
+        parsed_rides = []
+        for ride in api_rides:
+            parsed_ride = ParsedRide(
+                line=ride["line"],
+                boarding_stop=ride["board_stop"],  # API returns "board_stop", model expects "boarding_stop"
+                departing_stop=ride["depart_stop"],  # API returns "depart_stop", model expects "departing_stop"
+                ride_date=date.today(),
+                transferred=False
+            )
+            parsed_rides.append(parsed_ride)
+        
+        # Step 5: Detect transfers between consecutive rides
+        return detect_transfers_in_rides(parsed_rides)
+        
+    except Exception as e:
+        print(f"❌ Error with new Google Maps API approach: {e}")
+        # Fallback to existing method
+        return await extract_transit_info_with_api(url)
+
+# -------------------------------
+# GOOGLE MAPS API - ORIGINAL METHODS
 # -------------------------------
 async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
     """Extract transit information using Google Maps Directions API"""
     try:
-        # Parse origin and destination from the URL
-        origin, destination = parse_google_maps_url(url)
+        # Use the new simplified approach first
+        return await extract_transit_info_with_new_api(url)
         
-        if not origin or not destination:
-            print("❌ Could not extract origin/destination from URL")
-            return []
+    except Exception as e:
+        print(f"❌ Error with simplified API approach: {e}")
         
-        # Make request to Google Maps Directions API
-        api_url = "https://maps.googleapis.com/maps/api/directions/json"
-        params = {
-            'origin': f"{origin[0]},{origin[1]}" if isinstance(origin, tuple) else origin,
-            'destination': f"{destination[0]},{destination[1]}" if isinstance(destination, tuple) else destination,
-            'mode': 'transit',
-            'transit_mode': 'subway',
-            'key': GOOGLE_MAPS_API_KEY,
-            'alternatives': 'true',
-            'units': 'metric'
-        }
-        
-        response = requests.get(api_url, params=params)
-        data = response.json()
-        
-        if data.get('status') != 'OK':
-            print(f"❌ Google Maps API error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
-            if data.get('status') == 'REQUEST_DENIED':
-                print("💡 Make sure to enable the Directions API in your Google Cloud Console")
-            return await extract_transit_info_async(url)  # Fallback to browser scraping
-        
-        routes = data.get('routes', [])
-        if not routes:
-            print("❌ No transit routes found")
+        # Original fallback approach with coordinates parsing
+        try:
+            # Step 1: Expand shortened URLs if needed
+            expanded_url = expand_shortened_url(url)  # Remove await since function is no longer async
+            print(f"🔗 Expanded URL: {expanded_url}")
+            
+            # Step 2: Try to parse origin and destination from the expanded URL
+            origin, destination = parse_google_maps_url(expanded_url)
+            
+            # Step 3: If URL parsing fails, try browser-based extraction to get coordinates
+            if not origin or not destination:
+                print("⚠️ Could not parse coordinates from URL, trying browser extraction...")
+                coordinates = await extract_coordinates_from_browser(expanded_url)
+                if coordinates:
+                    origin, destination = coordinates
+                else:
+                    print("❌ Could not extract origin/destination from URL")
+                    return await extract_transit_info_async(expanded_url)  # Fallback to full browser scraping
+            
+            print(f"📍 Origin: {origin}")
+            print(f"📍 Destination: {destination}")
+            
+            # Step 4: Make request to Google Maps Directions API
+            api_url = "https://maps.googleapis.com/maps/api/directions/json"
+            params = {
+                'origin': f"{origin[0]},{origin[1]}" if isinstance(origin, tuple) else origin,
+                'destination': f"{destination[0]},{destination[1]}" if isinstance(destination, tuple) else destination,
+                'mode': 'transit',
+                'transit_mode': 'subway',
+                'key': GOOGLE_MAPS_API_KEY,
+                'alternatives': 'true',
+                'units': 'metric'
+            }
+            
+            response = requests.get(api_url, params=params)
+            data = response.json()
+            
+            if data.get('status') != 'OK':
+                print(f"❌ Google Maps API error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
+                if data.get('status') == 'REQUEST_DENIED':
+                    print("💡 Make sure to enable the Directions API in your Google Cloud Console")
+                return await extract_transit_info_async(url)  # Fallback to browser scraping
+            
+            routes = data.get('routes', [])
+            if not routes:
+                print("❌ No transit routes found")
+                return await extract_transit_info_async(url)  # Fallback to browser scraping
+            
+            print(f"✅ Found {len(routes)} route(s) from Google Maps API")
+            
+            # Process the API routes
+            parsed_rides = process_api_routes(routes)
+            return detect_transfers_in_rides(parsed_rides)
+            
+        except Exception as fallback_error:
+            print(f"❌ Error with original API approach: {fallback_error}")
+            # Final fallback to browser scraping
+            return await extract_transit_info_async(url)
             return []
         
         print(f"✅ Found {len(routes)} route(s) from Google Maps API")
@@ -431,14 +682,26 @@ def parse_google_maps_url(url: str) -> tuple:
     
     try:
         parsed = urlparse(url)
+        print(f"🔍 Parsing URL path: {parsed.path}")
         
         # Handle different Google Maps URL formats
-        if 'dir/' in parsed.path:
-            # Format: /dir/origin/destination/
+        if '/dir/' in parsed.path:
+            # Format: /maps/dir/origin/destination/ or /dir/origin/destination/
             path_parts = parsed.path.split('/')
-            if len(path_parts) >= 4:
-                origin_str = unquote(path_parts[2])
-                dest_str = unquote(path_parts[3])
+            print(f"🔍 Path parts: {path_parts}")
+            
+            # Find the index of 'dir' to get the right positions
+            dir_index = -1
+            for i, part in enumerate(path_parts):
+                if part == 'dir':
+                    dir_index = i
+                    break
+            
+            if dir_index >= 0 and len(path_parts) > dir_index + 2:
+                origin_str = unquote(path_parts[dir_index + 1])
+                dest_str = unquote(path_parts[dir_index + 2])
+                print(f"📍 Extracted origin: {origin_str}")
+                print(f"📍 Extracted destination: {dest_str}")
                 return origin_str, dest_str
         
         # Handle query parameters
