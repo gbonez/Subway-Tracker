@@ -68,7 +68,7 @@ if not DATABASE_URL:
         print(f"🔧 Constructed DATABASE_URL from Railway PostgreSQL variables")
     else:
         # For local development, fall back to SQLite
-        DATABASE_URL = "sqlite:///./subway_rides.db"
+        DATABASE_URL = "sqlite:///./rides.db"
         print("⚠️  Using SQLite for local development")
 
 # Log which database we're using
@@ -1012,7 +1012,7 @@ def export_rides_csv(db: Session = Depends(get_db)):
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=subway_rides.csv"}
+        headers={"Content-Disposition": "attachment; filename=rides.csv"}
     )
 
 @app.get("/rides/{ride_id}")

@@ -23,7 +23,7 @@ if not DATABASE_URL:
     if PGPASSWORD:
         DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
     else:
-        DATABASE_URL = "sqlite:///./subway_rides.db"
+        DATABASE_URL = "sqlite:///./rides.db"
 
 # Log which database we're using
 if DATABASE_URL.startswith("postgresql"):
@@ -50,7 +50,7 @@ def get_db():
 # DATABASE MODELS
 # -------------------------------
 class SubwayRide(Base):
-    __tablename__ = "subway_rides"
+    __tablename__ = "rides"
     
     id = Column(Integer, primary_key=True, index=True)
     line = Column(String, index=True)

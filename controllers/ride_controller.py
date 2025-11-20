@@ -279,7 +279,7 @@ async def export_rides_csv(db: Session = Depends(get_db)):
         return StreamingResponse(
             iter_csv(),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=subway_rides.csv"}
+            headers={"Content-Disposition": "attachment; filename=rides.csv"}
         )
         
     except Exception as e:

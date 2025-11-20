@@ -7,7 +7,7 @@ env/
 venv/
 
 # Local SQLite database (only use in development)
-subway_rides.db
+rides.db
 
 # OS and IDE files
 .DS_Store
