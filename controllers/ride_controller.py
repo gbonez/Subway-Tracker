@@ -210,6 +210,9 @@ async def parse_url(request: UrlParseRequest):
 async def get_rides(
     page: int = 1,
     per_page: int = 20,
+    since: Optional[str] = Query(None),
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     """Get paginated list of rides"""
@@ -217,12 +220,20 @@ async def get_rides(
         # Calculate offset
         offset = (page - 1) * per_page
         
-        # Get total count
-        total = db.query(func.count(SubwayRide.id)).scalar()
+        # Base query
+        base_query = db.query(SubwayRide)
+        
+        # Apply date filtering
+        if start and end:
+            base_query = base_query.filter(SubwayRide.date >= start, SubwayRide.date <= end)
+        elif since:
+            base_query = base_query.filter(SubwayRide.date >= since)
+        
+        # Get total count with filters applied
+        total = base_query.count()
         
         # Get rides with pagination  
-        rides = db.query(SubwayRide)\
-                 .order_by(SubwayRide.ride_number.desc(), SubwayRide.id.desc())\
+        rides = base_query.order_by(SubwayRide.ride_number.desc(), SubwayRide.id.desc())\
                  .offset(offset)\
                  .limit(per_page)\
                  .all()
@@ -320,7 +331,12 @@ async def export_rides_csv(db: Session = Depends(get_db)):
 # -------------------------------
 # STATISTICS ENDPOINTS
 # -------------------------------
-async def get_visited_stops_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
+async def get_visited_stops_stats(
+    since: Optional[str] = Query(None),
+    start: Optional[str] = Query(None), 
+    end: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """Get most visited stops statistics"""
     try:
         query = db.query(
@@ -329,7 +345,9 @@ async def get_visited_stops_stats(since: Optional[str] = Query(None), db: Sessio
         )
         
         # Apply date filter if provided
-        if since:
+        if start and end:
+            query = query.filter(SubwayRide.date >= start, SubwayRide.date <= end)
+        elif since:
             query = query.filter(SubwayRide.date >= since)
             
         # Group by stop and count visits (boarding stops)
@@ -341,7 +359,9 @@ async def get_visited_stops_stats(since: Optional[str] = Query(None), db: Sessio
             func.count(SubwayRide.depart_stop).label('visit_count')
         )
         
-        if since:
+        if start and end:
+            depart_query = depart_query.filter(SubwayRide.date >= start, SubwayRide.date <= end)
+        elif since:
             depart_query = depart_query.filter(SubwayRide.date >= since)
             
         depart_stops = depart_query.group_by(SubwayRide.depart_stop).all()
@@ -366,7 +386,12 @@ async def get_visited_stops_stats(since: Optional[str] = Query(None), db: Sessio
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get visited stops stats: {str(e)}")
 
-async def get_transfer_stops_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
+async def get_transfer_stops_stats(
+    since: Optional[str] = Query(None),
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None), 
+    db: Session = Depends(get_db)
+):
     """Get most transferred at stops statistics"""
     try:
         query = db.query(
@@ -375,7 +400,9 @@ async def get_transfer_stops_stats(since: Optional[str] = Query(None), db: Sessi
         ).filter(SubwayRide.transferred == True)
         
         # Apply date filter if provided
-        if since:
+        if start and end:
+            query = query.filter(SubwayRide.date >= start, SubwayRide.date <= end)
+        elif since:
             query = query.filter(SubwayRide.date >= since)
             
         result = query.group_by(SubwayRide.depart_stop).order_by(
@@ -390,7 +417,12 @@ async def get_transfer_stops_stats(since: Optional[str] = Query(None), db: Sessi
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get transfer stops stats: {str(e)}")
 
-async def get_popular_lines_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
+async def get_popular_lines_stats(
+    since: Optional[str] = Query(None),
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """Get most popular lines statistics"""
     try:
         query = db.query(
@@ -399,7 +431,9 @@ async def get_popular_lines_stats(since: Optional[str] = Query(None), db: Sessio
         )
         
         # Apply date filter if provided
-        if since:
+        if start and end:
+            query = query.filter(SubwayRide.date >= start, SubwayRide.date <= end)
+        elif since:
             query = query.filter(SubwayRide.date >= since)
             
         result = query.group_by(SubwayRide.line).order_by(
