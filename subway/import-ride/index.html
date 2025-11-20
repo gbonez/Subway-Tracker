@@ -251,7 +251,23 @@
             }
         }
     </style>
-    <script src="../../stopsByLine.js"></script>
+    <script>
+        // Load subway stations data
+        let stopsByLine = {};
+
+        async function loadSubwayData() {
+            try {
+                const response = await fetch('../../data/stops.json');
+                stopsByLine = await response.json();
+                console.log('✅ Loaded subway data');
+            } catch (error) {
+                console.error('❌ Failed to load subway data:', error);
+            }
+        }
+
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', loadSubwayData);
+    </script>
 </head>
 
 <body>

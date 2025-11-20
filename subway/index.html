@@ -167,7 +167,30 @@
       }
     }
   </style>
-  <script src="../stopsByLine.js"></script>
+  <script>
+    // Load subway stations data
+    let stopsByLine = {};
+
+    async function loadSubwayDataIfNeeded() {
+      if (Object.keys(stopsByLine).length > 0) return; // Already loaded
+
+      try {
+        const response = await fetch('../data/stops.json');
+        stopsByLine = await response.json();
+        console.log('✅ Loaded subway data');
+      } catch (error) {
+        console.error('❌ Failed to load subway data:', error);
+      }
+    }
+
+    async function loadSubwayData() {
+      await loadSubwayDataIfNeeded();
+      initializeApp();
+    }
+
+    // Load data when page loads
+    document.addEventListener('DOMContentLoaded', loadSubwayData);
+  </script>
 </head>
 
 <body>
@@ -247,6 +270,9 @@
       let entriesPerPage = 25;
 
       window.addEventListener("DOMContentLoaded", async () => {
+        // First load subway station data
+        await loadSubwayDataIfNeeded();
+
         // Test backend connectivity first
         console.log("🔗 Testing backend connectivity...");
         try {
