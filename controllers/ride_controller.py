@@ -194,8 +194,8 @@ async def parse_url(request: UrlParseRequest):
             "rides": [
                 {
                     "line": ride.line,
-                    "board_stop": ride.boarding_stop,
-                    "depart_stop": ride.departing_stop,
+                    "board_stop": ride.boarding_stop,  # Convert from boarding_stop to board_stop
+                    "depart_stop": ride.departing_stop,  # Convert from departing_stop to depart_stop
                     "date": ride.ride_date.isoformat(),
                     "transferred": ride.transferred
                 }
@@ -249,6 +249,25 @@ async def get_rides(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch rides: {str(e)}")
+
+async def delete_ride(ride_id: int, db: Session = Depends(get_db)):
+    """Delete a specific ride by ID"""
+    try:
+        ride = db.query(SubwayRide).filter(SubwayRide.id == ride_id).first()
+        
+        if not ride:
+            raise HTTPException(status_code=404, detail=f"Ride with ID {ride_id} not found")
+        
+        db.delete(ride)
+        db.commit()
+        
+        return {"message": f"🗑️ Deleted ride #{ride.ride_number} successfully!"}
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete ride: {str(e)}")
 
 async def delete_all_rides(db: Session = Depends(get_db)):
     """Delete all rides from the database"""

@@ -254,7 +254,7 @@ def get_transit_rides_from_api(api_key: str, origin: str, destination: str):
                     ride = {
                         "board_stop": departure_stop["name"],
                         "depart_stop": arrival_stop["name"], 
-                        "line": line_info.get("short_name", line_info.get("name", "Unknown"))
+                        "line": line_info.get("short_name", line_info.get("name", "Unknown")).replace(" Line", "")
                     }
                     rides.append(ride)
                     print(f"    🚇 Ride: {ride['board_stop']} → {ride['depart_stop']} (Line: {ride['line']})")
