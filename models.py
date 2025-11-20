@@ -58,6 +58,3 @@ class SubwayRide(Base):
     departing_stop = Column(String)
     ride_date = Column(Date)
     transferred = Column(Boolean, default=False)
-
-# Create tables
-Base.metadata.create_all(bind=engine)
