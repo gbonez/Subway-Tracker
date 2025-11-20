@@ -53,8 +53,10 @@ function updateDateRangeDisplay() {
     const display = document.getElementById('dateRangeDisplay');
     const dateInfo = getDateFilter();
 
-    if (dateInfo) {
-        display.textContent = formatDateRange(dateInfo.startDate, dateInfo.endDate, currentFilter);
+    if (dateInfo && dateInfo.start && dateInfo.end) {
+        const startDate = new Date(dateInfo.start);
+        const endDate = new Date(dateInfo.end);
+        display.textContent = formatDateRange(startDate, endDate, currentFilter);
     } else {
         display.textContent = 'All Time';
     }
@@ -278,23 +280,30 @@ function getDateFilter() {
     let start;
 
     switch (currentFilter) {
-        case 'daily':
+        case 'day':
             start = new Date(now);
             start.setHours(0, 0, 0, 0);
             return {
                 start: start.toISOString().split('T')[0],
                 end: now.toISOString().split('T')[0]
             };
-        case 'weekly':
+        case 'week':
             start = new Date(now);
             start.setDate(now.getDate() - 7);
             return {
                 start: start.toISOString().split('T')[0],
                 end: now.toISOString().split('T')[0]
             };
-        case 'monthly':
+        case 'month':
             start = new Date(now);
             start.setMonth(now.getMonth() - 1);
+            return {
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
+            };
+        case 'year':
+            start = new Date(now);
+            start.setFullYear(now.getFullYear() - 1);
             return {
                 start: start.toISOString().split('T')[0],
                 end: now.toISOString().split('T')[0]
@@ -321,14 +330,14 @@ async function loadAllData() {
         }
 
         console.log('🔍 Loading data with URLs:');
-        console.log(`- Rides: ${backendUrl}/rides/${params}`);
+        console.log(`- Rides: ${backendUrl}/rides/${params}&per_page=1000`);
         console.log(`- Visited: ${backendUrl}/stats/visited-stops${params}`);
         console.log(`- Transfers: ${backendUrl}/stats/transfer-stops${params}`);
         console.log(`- Lines: ${backendUrl}/stats/popular-lines${params}`);
 
         // Fetch all data with proper trailing slashes and error handling
         const [ridesResponse, visitedResponse, transfersResponse, linesResponse] = await Promise.all([
-            fetch(`${backendUrl}/rides/${params}`, {
+            fetch(`${backendUrl}/rides/${params}${params ? '&' : '?'}per_page=1000`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
