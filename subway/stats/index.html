@@ -425,27 +425,19 @@
                 // Extract rides array from API response
                 const ridesArray = rides.rides || [];
 
-                // Clear loading state before updating charts
-                document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
-                    const canvas = wrapper.querySelector('canvas');
-                    if (canvas) {
-                        wrapper.innerHTML = '';
-                        wrapper.appendChild(canvas);
-                    }
-                });
+                // Ensure all canvas elements exist before updating charts
+                ensureCanvasElements();
 
-                // Update summary stats
+                // Update summary stats with filtered data
                 updateSummaryStats(ridesArray, visitedStops, transferStops, popularLines);
 
-                // Update charts with a small delay to ensure DOM is ready
-                setTimeout(() => {
-                    console.log('🎨 Starting chart updates...');
-                    updateVisitedStopsChart(visitedStops);
-                    updateTransferStopsChart(transferStops);
-                    updatePopularLinesChart(popularLines);
-                    updateRidesOverTimeChart(ridesArray);
-                    console.log('🎨 Chart updates completed');
-                }, 100);
+                // Update charts immediately - no delay needed since we're ensuring elements exist
+                console.log('🎨 Starting chart updates...');
+                updateVisitedStopsChart(visitedStops);
+                updateTransferStopsChart(transferStops);
+                updatePopularLinesChart(popularLines);
+                updateRidesOverTimeChart(ridesArray);
+                console.log('🎨 Chart updates completed');
 
             } catch (error) {
                 console.error('❌ Error loading data:', error);
@@ -476,47 +468,137 @@
             });
         }
 
+        // Ensure all canvas elements exist and are properly initialized
+        function ensureCanvasElements() {
+            const canvasIds = ['visitedStopsChart', 'transferStopsChart', 'popularLinesChart', 'ridesOverTimeChart'];
+
+            canvasIds.forEach(id => {
+                let canvas = document.getElementById(id);
+                if (!canvas) {
+                    console.log(`🔧 Creating missing canvas element: ${id}`);
+                    // Find the wrapper for this chart
+                    const allWrappers = document.querySelectorAll('.chart-wrapper');
+                    const chartTitles = ['Most Visited Stops', 'Most Transferred At Stops', 'Most Popular Lines', 'Rides Over Time'];
+                    const chartIndex = canvasIds.indexOf(id);
+
+                    if (chartIndex >= 0 && allWrappers[chartIndex]) {
+                        allWrappers[chartIndex].innerHTML = `<canvas id="${id}"></canvas>`;
+                    }
+                } else {
+                    // Clear any loading/error content from wrapper but keep canvas
+                    const wrapper = canvas.closest('.chart-wrapper');
+                    if (wrapper) {
+                        const loadingOrError = wrapper.querySelector('.loading, .error, .no-data');
+                        if (loadingOrError) {
+                            wrapper.innerHTML = `<canvas id="${id}"></canvas>`;
+                        }
+                    }
+                }
+            });
+
+            console.log('🔧 Canvas elements verification completed');
+        }
+
         // Update summary statistics
         function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
+            console.log('📊 Updating summary stats with:', {
+                rides: rides.length,
+                visitedStops: visitedStops.length,
+                transferStops: transferStops.length,
+                popularLines: popularLines.length
+            });
+
             const totalRides = rides.length;
-            const uniqueStops = new Set([...rides.map(r => r.board_stop), ...rides.map(r => r.depart_stop)]).size;
-            const uniqueLines = new Set(rides.map(r => r.line)).size;
-            const transfers = rides.filter(r => r.transferred).length;
+
+            // Calculate unique stops from the filtered rides data
+            const allStops = new Set();
+            rides.forEach(ride => {
+                if (ride.board_stop) allStops.add(ride.board_stop);
+                if (ride.depart_stop) allStops.add(ride.depart_stop);
+            });
+            const uniqueStops = allStops.size;
+
+            // Calculate unique lines from the filtered rides data
+            const uniqueLines = new Set(rides.map(r => r.line).filter(line => line)).size;
+
+            // Calculate transfers from the filtered rides data
+            const transfers = rides.filter(r => r.transferred === true || r.transferred === 1).length;
             const transferRate = totalRides > 0 ? Math.round((transfers / totalRides) * 100) : 0;
 
-            document.getElementById('totalRides').textContent = totalRides.toLocaleString();
-            document.getElementById('uniqueStops').textContent = uniqueStops;
-            document.getElementById('uniqueLines').textContent = uniqueLines;
-            document.getElementById('transferRate').textContent = `${transferRate}%`;
+            // Update display with animation
+            animateValue('totalRides', parseInt(document.getElementById('totalRides').textContent) || 0, totalRides);
+            animateValue('uniqueStops', parseInt(document.getElementById('uniqueStops').textContent) || 0, uniqueStops);
+            animateValue('uniqueLines', parseInt(document.getElementById('uniqueLines').textContent) || 0, uniqueLines);
+            animateValue('transferRate', parseInt(document.getElementById('transferRate').textContent) || 0, transferRate, '%');
+
+            console.log('📊 Summary stats updated:', {
+                totalRides,
+                uniqueStops,
+                uniqueLines,
+                transferRate: `${transferRate}%`
+            });
+        }
+
+        // Animate value changes in summary stats
+        function animateValue(elementId, start, end, suffix = '') {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+
+            const duration = 500; // 500ms animation
+            const startTime = performance.now();
+
+            function animate(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                const current = Math.round(start + (end - start) * progress);
+                element.textContent = current.toLocaleString() + suffix;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                }
+            }
+
+            requestAnimationFrame(animate);
         }
 
         // Update visited stops chart
         function updateVisitedStopsChart(data) {
             const chartElement = document.getElementById('visitedStopsChart');
             if (!chartElement) {
-                console.error('❌ visitedStopsChart element not found');
+                console.error('❌ visitedStopsChart element not found after ensureCanvasElements');
+                return;
+            }
+
+            console.log('🎯 Updating visited stops chart with', data.length, 'items');
+
+            // Destroy existing chart
+            if (charts.visitedStops) {
+                charts.visitedStops.destroy();
+                delete charts.visitedStops;
+            }
+
+            if (!data || data.length === 0) {
+                const chartWrapper = chartElement.closest('.chart-wrapper');
+                if (chartWrapper) {
+                    chartWrapper.innerHTML = '<div class="no-data">No visited stops data for this time period</div>';
+                }
                 return;
             }
 
             const ctx = chartElement.getContext('2d');
-
-            if (charts.visitedStops) {
-                charts.visitedStops.destroy();
-            }
-
-            if (!data || data.length === 0) {
-                const chartWrapper = chartElement.parentElement;
-                chartWrapper.innerHTML = '<div class="no-data">No data available for this time period</div>';
+            if (!ctx) {
+                console.error('❌ Could not get canvas context for visitedStopsChart');
                 return;
             }
 
             charts.visitedStops = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.stop_name),
+                    labels: data.slice(0, 10).map(item => item.stop_name || 'Unknown'),
                     datasets: [{
                         label: 'Visits',
-                        data: data.slice(0, 10).map(item => item.visit_count),
+                        data: data.slice(0, 10).map(item => item.visit_count || 0),
                         backgroundColor: colors.gradient,
                         borderColor: colors.primary,
                         borderWidth: 1
@@ -552,35 +634,47 @@
                     }
                 }
             });
+
+            console.log('✅ Visited stops chart created successfully');
         }
 
         // Update transfer stops chart
         function updateTransferStopsChart(data) {
             const chartElement = document.getElementById('transferStopsChart');
             if (!chartElement) {
-                console.error('❌ transferStopsChart element not found');
+                console.error('❌ transferStopsChart element not found after ensureCanvasElements');
+                return;
+            }
+
+            console.log('🎯 Updating transfer stops chart with', data.length, 'items');
+
+            // Destroy existing chart
+            if (charts.transferStops) {
+                charts.transferStops.destroy();
+                delete charts.transferStops;
+            }
+
+            if (!data || data.length === 0) {
+                const chartWrapper = chartElement.closest('.chart-wrapper');
+                if (chartWrapper) {
+                    chartWrapper.innerHTML = '<div class="no-data">No transfer data for this time period</div>';
+                }
                 return;
             }
 
             const ctx = chartElement.getContext('2d');
-
-            if (charts.transferStops) {
-                charts.transferStops.destroy();
-            }
-
-            if (!data || data.length === 0) {
-                const chartWrapper = chartElement.parentElement;
-                chartWrapper.innerHTML = '<div class="no-data">No transfer data available for this time period</div>';
+            if (!ctx) {
+                console.error('❌ Could not get canvas context for transferStopsChart');
                 return;
             }
 
             charts.transferStops = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.stop_name),
+                    labels: data.slice(0, 10).map(item => item.stop_name || 'Unknown'),
                     datasets: [{
                         label: 'Transfers',
-                        data: data.slice(0, 10).map(item => item.transfer_count),
+                        data: data.slice(0, 10).map(item => item.transfer_count || 0),
                         backgroundColor: colors.gradient,
                         borderColor: colors.secondary,
                         borderWidth: 1
@@ -616,35 +710,47 @@
                     }
                 }
             });
+
+            console.log('✅ Transfer stops chart created successfully');
         }
 
         // Update popular lines chart
         function updatePopularLinesChart(data) {
             const chartElement = document.getElementById('popularLinesChart');
             if (!chartElement) {
-                console.error('❌ popularLinesChart element not found');
+                console.error('❌ popularLinesChart element not found after ensureCanvasElements');
+                return;
+            }
+
+            console.log('🎯 Updating popular lines chart with', data.length, 'items');
+
+            // Destroy existing chart
+            if (charts.popularLines) {
+                charts.popularLines.destroy();
+                delete charts.popularLines;
+            }
+
+            if (!data || data.length === 0) {
+                const chartWrapper = chartElement.closest('.chart-wrapper');
+                if (chartWrapper) {
+                    chartWrapper.innerHTML = '<div class="no-data">No line data for this time period</div>';
+                }
                 return;
             }
 
             const ctx = chartElement.getContext('2d');
-
-            if (charts.popularLines) {
-                charts.popularLines.destroy();
-            }
-
-            if (!data || data.length === 0) {
-                const chartWrapper = chartElement.parentElement;
-                chartWrapper.innerHTML = '<div class="no-data">No line data available for this time period</div>';
+            if (!ctx) {
+                console.error('❌ Could not get canvas context for popularLinesChart');
                 return;
             }
 
             charts.popularLines = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: data.slice(0, 10).map(item => item.line),
+                    labels: data.slice(0, 10).map(item => item.line || 'Unknown'),
                     datasets: [{
                         label: 'Rides',
-                        data: data.slice(0, 10).map(item => item.ride_count),
+                        data: data.slice(0, 10).map(item => item.ride_count || 0),
                         backgroundColor: colors.gradient,
                         borderColor: colors.accent,
                         borderWidth: 1
@@ -679,31 +785,43 @@
                     }
                 }
             });
+
+            console.log('✅ Popular lines chart created successfully');
         }
 
         // Update rides over time chart
         function updateRidesOverTimeChart(rides) {
             const chartElement = document.getElementById('ridesOverTimeChart');
             if (!chartElement) {
-                console.error('❌ ridesOverTimeChart element not found');
+                console.error('❌ ridesOverTimeChart element not found after ensureCanvasElements');
+                return;
+            }
+
+            console.log('🎯 Updating rides over time chart with', rides.length, 'rides');
+
+            // Destroy existing chart
+            if (charts.ridesOverTime) {
+                charts.ridesOverTime.destroy();
+                delete charts.ridesOverTime;
+            }
+
+            if (!rides || rides.length === 0) {
+                const chartWrapper = chartElement.closest('.chart-wrapper');
+                if (chartWrapper) {
+                    chartWrapper.innerHTML = '<div class="no-data">No ride data for this time period</div>';
+                }
                 return;
             }
 
             const ctx = chartElement.getContext('2d');
-
-            if (charts.ridesOverTime) {
-                charts.ridesOverTime.destroy();
-            }
-
-            if (!rides || rides.length === 0) {
-                const chartWrapper = chartElement.parentElement;
-                chartWrapper.innerHTML = '<div class="no-data">No ride data available for this time period</div>';
+            if (!ctx) {
+                console.error('❌ Could not get canvas context for ridesOverTimeChart');
                 return;
             }
 
             // Group rides by date
             const ridesByDate = rides.reduce((acc, ride) => {
-                const date = ride.date;
+                const date = ride.date || ride.created_at?.split('T')[0] || 'Unknown';
                 acc[date] = (acc[date] || 0) + 1;
                 return acc;
             }, {});
@@ -756,6 +874,8 @@
                     }
                 }
             });
+
+            console.log('✅ Rides over time chart created successfully');
         }
     </script>
     </div>
