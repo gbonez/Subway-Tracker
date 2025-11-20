@@ -43,6 +43,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[
             "https://subway-tracker-production.up.railway.app",
+            "https://www.gbonez.org",
+            "https://gbonez.org", 
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:8000",

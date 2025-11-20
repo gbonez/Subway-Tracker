@@ -279,6 +279,9 @@
     <script>
         // Configuration
         const backendUrl = `https://subway-tracker-production.up.railway.app`;
+        console.log('🔧 Backend URL configured as:', backendUrl);
+        console.log('🌐 Current page protocol:', window.location.protocol);
+        console.log('🌐 Current page host:', window.location.host);
         let currentFilter = 'all';
         let charts = {};
 
@@ -433,7 +436,18 @@
 
             } catch (error) {
                 console.error('❌ Error loading data:', error);
-                showError(`Failed to load statistics data: ${error.message}`)
+                console.error('❌ Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+
+                // Check if this is a CORS/network error
+                if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+                    showError(`Network error: Cannot connect to backend. Check CORS and URL configuration. Backend URL: ${backendUrl}`);
+                } else {
+                    showError(`Failed to load statistics data: ${error.message}`);
+                }
             }
         }
 
