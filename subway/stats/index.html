@@ -349,16 +349,62 @@
                 const dateFilter = getDateFilter();
                 const params = dateFilter ? `?since=${dateFilter}` : '';
 
-                // Fetch all data
+                console.log('🔍 Loading data with URLs:');
+                console.log(`- Rides: ${backendUrl}/rides/${params}`);
+                console.log(`- Visited: ${backendUrl}/stats/visited-stops${params}`);
+                console.log(`- Transfers: ${backendUrl}/stats/transfer-stops${params}`);
+                console.log(`- Lines: ${backendUrl}/stats/popular-lines${params}`);
+
+                // Fetch all data with proper trailing slashes and error handling
                 const [ridesResponse, visitedResponse, transfersResponse, linesResponse] = await Promise.all([
-                    fetch(`${backendUrl}/rides${params}`),
-                    fetch(`${backendUrl}/stats/visited-stops${params}`),
-                    fetch(`${backendUrl}/stats/transfer-stops${params}`),
-                    fetch(`${backendUrl}/stats/popular-lines${params}`)
+                    fetch(`${backendUrl}/rides/${params}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        mode: 'cors'
+                    }),
+                    fetch(`${backendUrl}/stats/visited-stops${params}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        mode: 'cors'
+                    }),
+                    fetch(`${backendUrl}/stats/transfer-stops${params}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        mode: 'cors'
+                    }),
+                    fetch(`${backendUrl}/stats/popular-lines${params}`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                        mode: 'cors'
+                    })
                 ]);
 
+                console.log('📡 Response status codes:', {
+                    rides: ridesResponse.status,
+                    visited: visitedResponse.status,
+                    transfers: transfersResponse.status,
+                    lines: linesResponse.status
+                });
+
                 if (!ridesResponse.ok || !visitedResponse.ok || !transfersResponse.ok || !linesResponse.ok) {
-                    throw new Error('Failed to fetch data from server');
+                    const errors = [];
+                    if (!ridesResponse.ok) errors.push(`Rides: ${ridesResponse.status} ${ridesResponse.statusText}`);
+                    if (!visitedResponse.ok) errors.push(`Visited: ${visitedResponse.status} ${visitedResponse.statusText}`);
+                    if (!transfersResponse.ok) errors.push(`Transfers: ${transfersResponse.status} ${transfersResponse.statusText}`);
+                    if (!linesResponse.ok) errors.push(`Lines: ${linesResponse.status} ${linesResponse.statusText}`);
+                    throw new Error('API Errors: ' + errors.join(', '));
                 }
 
                 const rides = await ridesResponse.json();
@@ -366,18 +412,28 @@
                 const transferStops = await transfersResponse.json();
                 const popularLines = await linesResponse.json();
 
+                console.log('✅ Data loaded successfully:', {
+                    rides: rides.rides ? rides.rides.length : 'N/A',
+                    visitedStops: visitedStops.length,
+                    transferStops: transferStops.length,
+                    popularLines: popularLines.length
+                });
+
+                // Extract rides array from API response
+                const ridesArray = rides.rides || [];
+
                 // Update summary stats
-                updateSummaryStats(rides, visitedStops, transferStops, popularLines);
+                updateSummaryStats(ridesArray, visitedStops, transferStops, popularLines);
 
                 // Update charts
                 updateVisitedStopsChart(visitedStops);
                 updateTransferStopsChart(transferStops);
                 updatePopularLinesChart(popularLines);
-                updateRidesOverTimeChart(rides);
+                updateRidesOverTimeChart(ridesArray);
 
             } catch (error) {
-                console.error('Error loading data:', error);
-                showError('Failed to load statistics data. Please check your connection and try again.');
+                console.error('❌ Error loading data:', error);
+                showError(`Failed to load statistics data: ${error.message}`)
             }
         }
 
