@@ -198,6 +198,19 @@ async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
         
         if data['status'] != 'OK':
             print(f"❌ Google Maps API error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
+            
+            # Provide helpful error messages
+            if data['status'] == 'REQUEST_DENIED':
+                print("💡 To fix this:")
+                print("   1. Go to Google Cloud Console: https://console.cloud.google.com/")
+                print("   2. Enable the 'Directions API' for your project")
+                print("   3. Make sure your API key has permissions for Directions API")
+                print("   4. You may also need to enable 'Places API' and 'Geocoding API'")
+            elif data['status'] == 'OVER_QUERY_LIMIT':
+                print("💡 API quota exceeded. Check your usage limits in Google Cloud Console.")
+            elif data['status'] == 'ZERO_RESULTS':
+                print("💡 No transit routes found between the specified locations.")
+            
             return []
         
         print(f"✅ Found {len(data.get('routes', []))} route(s)")
@@ -704,6 +717,24 @@ def test_database(db: Session = Depends(get_db)):
         return {"status": "connected", "ride_count": result.count if result else 0}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database connection failed: {str(e)}")
+
+@app.get("/debug-url-parsing")
+def debug_url_parsing(url: str):
+    """Debug endpoint to test Google Maps URL parsing"""
+    try:
+        origin, destination = parse_google_maps_url(url)
+        return {
+            "url": url,
+            "parsed_origin": origin,
+            "parsed_destination": destination,
+            "success": origin is not None and destination is not None
+        }
+    except Exception as e:
+        return {
+            "url": url,
+            "error": str(e),
+            "success": False
+        }
 
 @app.post("/add-test-data")
 def add_test_data(db: Session = Depends(get_db)):
