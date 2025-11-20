@@ -373,10 +373,10 @@
         const loadingIndicator = document.getElementById("loading");
         loadingIndicator.style.display = "block";
 
-        console.log("🔍 Fetching rides from:", `${backendUrl}/rides/`);
+        console.log("🔍 Fetching all rides from:", `${backendUrl}/rides/?per_page=10000`);
 
         try {
-          const res = await fetch(`${backendUrl}/rides/`);
+          const res = await fetch(`${backendUrl}/rides/?per_page=10000`);
           console.log("📡 Response status:", res.status);
 
           if (!res.ok) {
