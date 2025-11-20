@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 # Import modules
 from models import get_db
-from utils.helpers import install_playwright_browsers, get_app_port
+from utils.helpers import get_app_port
 from controllers.ride_controller import (
     get_root,
     debug_url_parsing,
@@ -34,9 +34,6 @@ from controllers.ride_controller import (
 # -------------------------------
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application"""
-    
-    # Install Playwright browsers on startup (unless in Docker)
-    install_playwright_browsers()
     
     # Create FastAPI app
     app = FastAPI(title="NYC Subway Tracker API")

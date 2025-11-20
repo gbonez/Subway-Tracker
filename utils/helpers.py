@@ -1,34 +1,8 @@
 """
 Utility functions for the NYC Subway Tracker
-Contains Playwright setup, browser management, and general helpers
+Contains general helpers and utilities
 """
 import os
-import subprocess
-import sys
-
-def install_playwright_browsers():
-    """Install Playwright browsers if not in Docker environment"""
-    if os.getenv("DOCKER_ENV"):
-        print("🐳 Running in Docker, skipping Playwright browser installation")
-        return
-    
-    try:
-        print("🎭 Installing Playwright browsers...")
-        subprocess.run([
-            sys.executable, "-m", "playwright", "install", "chromium"
-        ], check=True, capture_output=True, text=True)
-        print("✅ Playwright browsers installed successfully")
-        
-        # Also install system dependencies if needed
-        subprocess.run([
-            sys.executable, "-m", "playwright", "install-deps"
-        ], capture_output=True, text=True)
-        
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Failed to install Playwright browsers: {e}")
-        print("🔧 You may need to run: python -m playwright install chromium")
-    except Exception as e:
-        print(f"⚠️ Error during Playwright installation: {e}")
 
 def get_app_port() -> int:
     """Get the port for the application from environment variables"""

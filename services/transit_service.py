@@ -5,10 +5,8 @@ Handles Google Maps API integration, station matching, and route parsing
 import os
 import re
 import json
-import asyncio
 import requests
 from typing import List, Dict, Tuple
-from playwright.async_api import async_playwright
 from pydantic import BaseModel
 from datetime import date, datetime, timezone, timedelta
 
@@ -139,68 +137,6 @@ def expand_shortened_url(url: str) -> str:
     except Exception as e:
         print(f"⚠️ Error expanding URL: {e}")
         return url  # Return original URL if expansion fails
-
-async def extract_coordinates_from_browser(url: str) -> tuple:
-    """Extract origin and destination coordinates using browser automation"""
-    try:
-        print("🎭 Using browser to extract coordinates...")
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
-            page = await context.new_page()
-            
-            try:
-                await page.goto(url, wait_until='domcontentloaded', timeout=15000)
-                await asyncio.sleep(3)  # Wait for dynamic content
-                
-                # Try to extract coordinates from the page URL or data
-                current_url = page.url
-                print(f"📍 Current URL after redirect: {current_url}")
-                
-                # Parse coordinates from the redirected URL
-                origin, destination = parse_google_maps_url(current_url)
-                if origin and destination:
-                    return origin, destination
-                
-                # Try to extract from page data attributes or JavaScript
-                coordinates = await page.evaluate("""
-                    () => {
-                        // Look for coordinates in various places
-                        const url = window.location.href;
-                        
-                        // Try to find coordinates in URL
-                        const coordMatches = url.match(/@(-?\\d+\\.\\d+),(-?\\d+\\.\\d+)/g);
-                        if (coordMatches && coordMatches.length >= 2) {
-                            const coords1 = coordMatches[0].substring(1).split(',');
-                            const coords2 = coordMatches[1].substring(1).split(',');
-                            return [
-                                [parseFloat(coords1[0]), parseFloat(coords1[1])],
-                                [parseFloat(coords2[0]), parseFloat(coords2[1])]
-                            ];
-                        }
-                        
-                        // Look for direction data in the page
-                        const dirMatch = url.match(/dir\\/([^/]+)\\/([^/]+)/);
-                        if (dirMatch) {
-                            return [decodeURIComponent(dirMatch[1]), decodeURIComponent(dirMatch[2])];
-                        }
-                        
-                        return null;
-                    }
-                """)
-                
-                if coordinates:
-                    print(f"✅ Extracted coordinates from browser: {coordinates}")
-                    return coordinates[0], coordinates[1]
-                
-            finally:
-                await browser.close()
-                
-    except Exception as e:
-        print(f"❌ Browser coordinate extraction error: {e}")
-    
-    return None, None
 
 # -------------------------------
 # GOOGLE MAPS API - NEW SIMPLIFIED APPROACH
@@ -356,15 +292,10 @@ async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
             # Step 2: Try to parse origin and destination from the expanded URL
             origin, destination = parse_google_maps_url(expanded_url)
             
-            # Step 3: If URL parsing fails, try browser-based extraction to get coordinates
+            # Step 3: If URL parsing fails, return error - no browser fallback
             if not origin or not destination:
-                print("⚠️ Could not parse coordinates from URL, trying browser extraction...")
-                coordinates = await extract_coordinates_from_browser(expanded_url)
-                if coordinates:
-                    origin, destination = coordinates
-                else:
-                    print("❌ Could not extract origin/destination from URL")
-                    return await extract_transit_info_async(expanded_url)  # Fallback to full browser scraping
+                print("❌ Could not parse coordinates from URL, and browser automation is disabled")
+                return []  # Return empty list instead of browser fallback
             
             print(f"📍 Origin: {origin}")
             print(f"📍 Destination: {destination}")
@@ -388,12 +319,14 @@ async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
                 print(f"❌ Google Maps API error: {data.get('status')} - {data.get('error_message', 'Unknown error')}")
                 if data.get('status') == 'REQUEST_DENIED':
                     print("💡 Make sure to enable the Directions API in your Google Cloud Console")
-                return await extract_transit_info_async(url)  # Fallback to browser scraping
+                return []  # Return empty list instead of browser fallback
             
             routes = data.get('routes', [])
             if not routes:
                 print("❌ No transit routes found")
-                return await extract_transit_info_async(url)  # Fallback to browser scraping
+                return []  # Return empty list instead of browser fallback
+            
+            print(f"✅ Found {len(routes)} route(s) from Google Maps API")
             
             print(f"✅ Found {len(routes)} route(s) from Google Maps API")
             
@@ -403,20 +336,13 @@ async def extract_transit_info_with_api(url: str) -> List[ParsedRide]:
             
         except Exception as fallback_error:
             print(f"❌ Error with original API approach: {fallback_error}")
-            # Final fallback to browser scraping
-            return await extract_transit_info_async(url)
+            # Return empty list instead of browser fallback
             return []
-        
-        print(f"✅ Found {len(routes)} route(s) from Google Maps API")
-        
-        # Process the API routes
-        parsed_rides = process_api_routes(routes)
-        return detect_transfers_in_rides(parsed_rides)
         
     except Exception as e:
         print(f"❌ Error with Google Maps API: {e}")
-        # Fallback to browser scraping
-        return await extract_transit_info_async(url)
+        # Return empty list instead of browser fallback
+        return []
 
 def process_api_routes(routes: list) -> List[ParsedRide]:
     """Process Google Maps API routes into ParsedRide objects"""
@@ -484,201 +410,6 @@ def similar_station_names(name1: str, name2: str) -> bool:
     words2 = set(norm2.split())
     
     return len(words1.intersection(words2)) >= 1
-
-# -------------------------------
-# BROWSER-BASED EXTRACTION
-# -------------------------------
-async def extract_transit_info_async(url: str) -> List[ParsedRide]:
-    """Extract transit info using browser automation (fallback method)"""
-    print(f"🎭 Starting browser extraction from: {url}")
-    
-    try:
-        print("🚀 Launching browser...")
-        
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
-            page = await context.new_page()
-            
-            try:
-                print(f"🌐 Navigating to: {url}")
-                
-                # Progressive navigation strategy
-                try:
-                    await page.goto(url, wait_until='domcontentloaded', timeout=20000)
-                    print("✅ Page loaded (domcontentloaded)")
-                except Exception as e:
-                    print(f"⚠️ Timeout on domcontentloaded, trying load: {e}")
-                    await page.goto(url, wait_until='load', timeout=15000)
-                    print("✅ Page loaded (load)")
-                
-                # Wait a bit for dynamic content
-                await asyncio.sleep(3)
-                
-                # Strategy 1: Look for transit route information in the DOM
-                route_segments = await page.evaluate("""
-                    () => {
-                        const segments = [];
-                        
-                        // Look for elements containing subway line information
-                        const selectors = [
-                            '[data-value*="subway"]',
-                            '[aria-label*="subway"]',
-                            '.transit-line',
-                            '.route-segment',
-                            '[class*="transit"]',
-                            '[class*="route"]',
-                            'div[role="button"]'
-                        ];
-                        
-                        selectors.forEach(selector => {
-                            document.querySelectorAll(selector).forEach(element => {
-                                const text = element.textContent?.trim();
-                                const ariaLabel = element.getAttribute('aria-label');
-                                
-                                if (text || ariaLabel) {
-                                    // Look for patterns that might indicate subway routes
-                                    const content = (text + ' ' + (ariaLabel || '')).toLowerCase();
-                                    if (content.includes('subway') || 
-                                        content.includes('train') ||
-                                        content.includes('line') ||
-                                        /\\b[1-7ABCDEFGJLMNQRSWZ]\\s+(line|train)\\b/i.test(content)) {
-                                        segments.push({
-                                            text: text,
-                                            ariaLabel: ariaLabel,
-                                            selector: selector
-                                        });
-                                    }
-                                }
-                            });
-                        });
-                        
-                        return segments;
-                    }
-                """)
-                
-                print(f"📊 Found {len(route_segments)} potential route segments")
-                
-                # Strategy 2: Look for structured transit data in the page
-                structured_data = await page.evaluate("""
-                    () => {
-                        const data = [];
-                        
-                        // Look for JSON-LD structured data
-                        const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-                        scripts.forEach(script => {
-                            try {
-                                const json = JSON.parse(script.textContent);
-                                if (json && json.potentialAction) {
-                                    data.push(json);
-                                }
-                            } catch (e) {}
-                        });
-                        
-                        // Look for window data that might contain route information
-                        const windowDataKeys = ['APP_INITIALIZATION_STATE', 'APP_OPTIONS'];
-                        windowDataKeys.forEach(key => {
-                            if (window[key] && typeof window[key] === 'object') {
-                                try {
-                                    const str = JSON.stringify(window[key]);
-                                    const transitMatches = str.match(/"([0-9A-Z]).*?(?:St|Ave|Street|Avenue|Station).*?"/gi);
-                                    if (transitMatches) {
-                                        data.push({ windowData: key, matches: transitMatches });
-                                    }
-                                } catch (e) {}
-                            }
-                        });
-                        
-                        return data;
-                    }
-                """)
-                
-                print(f"📋 Found {len(structured_data)} structured data elements")
-                
-                # Process the extracted data
-                return await process_extracted_data(route_segments, structured_data)
-                
-            finally:
-                await browser.close()
-                
-    except Exception as e:
-        print(f"❌ Browser extraction error: {e}")
-        return []
-
-async def process_extracted_data(route_segments: List[dict], structured_data: List[dict]) -> List[ParsedRide]:
-    """Process extracted data into ParsedRide objects with intelligent station matching"""
-    parsed_rides = []
-    all_subway_stations = load_subway_stations()
-    
-    # Flatten all stations from all lines for matching
-    all_stations = []
-    for line_stations in all_subway_stations.values():
-        all_stations.extend(line_stations)
-    
-    print(f"🚇 Loaded {len(all_stations)} subway stations for matching")
-    
-    # Process route segments
-    for segment in route_segments:
-        text = segment.get('text', '')
-        aria_label = segment.get('ariaLabel', '')
-        
-        # Look for station names in the text
-        combined_text = f"{text} {aria_label}".strip()
-        
-        # Extract potential station names (words ending with St, Ave, etc.)
-        station_patterns = [
-            r'\b\d+\s*(?:St|Street|Ave|Avenue)(?:\s*[-–]\s*\w+(?:\s+\w+)*)?',
-            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s*(?:St|Ave|Station)',
-            r'\b\w+\s*[-–]\s*\w+(?:\s+\w+)*',
-            r'\b(?:Times\s+Sq|Union\s+Sq|Grand\s+Central)',
-        ]
-        
-        for pattern in station_patterns:
-            matches = re.findall(pattern, combined_text, re.IGNORECASE)
-            for match in matches:
-                # Try to find matching stations in our database
-                station_matches = find_matching_stations(match, all_stations)
-                
-                if station_matches:
-                    best_match = station_matches[0]  # Highest confidence match
-                    station_name = best_match[0]
-                    confidence = best_match[1]
-                    
-                    print(f"🎯 Matched '{match}' to '{station_name}' (confidence: {confidence}%)")
-                    
-                    # For now, create a placeholder ride - in real implementation,
-                    # you'd need more context to determine line, boarding vs departing, etc.
-                    if confidence >= 60:  # Only use high-confidence matches
-                        # Try to determine which line this station belongs to
-                        possible_lines = []
-                        for line, stations in all_subway_stations.items():
-                            if station_name in stations:
-                                possible_lines.append(line)
-                        
-                        if possible_lines:
-                            # Use the first available line (in practice, you'd want better logic)
-                            line = possible_lines[0]
-                            
-                            # This is simplified - you'd need better logic to determine
-                            # boarding vs departing and pair stations correctly
-                            parsed_ride = ParsedRide(
-                                line=line,
-                                boarding_stop=station_name,
-                                departing_stop="Unknown",  # Would need more processing
-                                ride_date=date.today(),
-                                transferred=False
-                            )
-                            parsed_rides.append(parsed_ride)
-    
-    # Process structured data (simplified)
-    for data in structured_data:
-        if isinstance(data, dict) and 'matches' in data:
-            for match in data['matches'][:5]:  # Limit processing
-                station_matches = find_matching_stations(match.strip('"'), all_stations)
-                if station_matches and station_matches[0][1] >= 70:  # High confidence only
-                    print(f"📊 Structured data match: {match} -> {station_matches[0][0]}")
-    
-    return parsed_rides
 
 # -------------------------------
 # URL PARSING UTILITIES
@@ -776,30 +507,5 @@ def extract_coords_from_data(data_param: str) -> tuple:
     
     return None, None
 
-# -------------------------------
-# LEGACY FALLBACK FUNCTIONS
-# -------------------------------
-async def extract_transit_info_from_url(url: str) -> List[ParsedRide]:
-    """Legacy function - now routes to async version"""
-    return await extract_transit_info_async(url)
-
-def extract_transit_info_from_url_fallback(url: str) -> List[ParsedRide]:
-    """Synchronous fallback that runs the async version"""
-    try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(extract_transit_info_async(url))
-    except RuntimeError:
-        # If no event loop is running, create one
-        return asyncio.run(extract_transit_info_async(url))
-
-def extract_from_maps_page(html_content: str, full_url: str = "") -> List[ParsedRide]:
-    """Legacy function - placeholder for backward compatibility"""
-    return []
-
-def extract_from_directions_data(html_content: str) -> List[ParsedRide]:
-    """Legacy function - placeholder for backward compatibility"""
-    return []
-
-def extract_by_station_matching(html_content: str) -> List[ParsedRide]:
-    """Legacy function - placeholder for backward compatibility"""
-    return []
+# All browser automation and legacy fallback functions removed
+# The service now relies entirely on Google Maps API for URL parsing
