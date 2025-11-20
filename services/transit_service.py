@@ -10,10 +10,17 @@ import requests
 from typing import List, Dict, Tuple
 from playwright.async_api import async_playwright
 from pydantic import BaseModel
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 
 # Google Maps API Configuration
 GOOGLE_MAPS_API_KEY = "AIzaSyDAHi8BNX3Fp3WxcOtAWg1fuzBWSBB7J4w"
+
+def get_est_date() -> date:
+    """Get current date in Eastern Standard Time"""
+    # EST is UTC-5
+    est_tz = timezone(timedelta(hours=-5))
+    est_now = datetime.now(est_tz)
+    return est_now.date()
 
 # -------------------------------
 # PYDANTIC MODELS
@@ -315,7 +322,7 @@ async def extract_transit_info_with_new_api(url: str) -> List[ParsedRide]:
                 line=ride["line"],
                 boarding_stop=ride["board_stop"],  # Correct mapping: API "board_stop" -> model "boarding_stop"
                 departing_stop=ride["depart_stop"],  # Correct mapping: API "depart_stop" -> model "departing_stop"
-                ride_date=date.today(),
+                ride_date=get_est_date(),  # Use EST date instead of UTC
                 transferred=False
             )
             parsed_rides.append(parsed_ride)

@@ -648,15 +648,18 @@
         }
 
         function addNewRide(insertIndex) {
-            // Get current date in YYYY-MM-DD format for the database
+            // Get current date in EST timezone for the database
             const today = new Date();
-            const currentDate = today.toISOString().split('T')[0];
+            // Convert to EST by adjusting for timezone offset
+            const estOffset = -5 * 60; // EST is UTC-5 (in minutes)
+            const estDate = new Date(today.getTime() + (estOffset - today.getTimezoneOffset()) * 60000);
+            const currentDate = estDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
 
             const newRide = {
                 line: "",
                 board_stop: "",
                 depart_stop: "",
-                date: currentDate, // Default to today's date
+                date: currentDate, // Default to today's date in EST
                 transferred: false
             };
 
@@ -665,9 +668,7 @@
 
             // Automatically start editing the new ride
             setTimeout(() => editRide(insertIndex), 100);
-        }
-
-        async function confirmAndSubmit() {
+        } async function confirmAndSubmit() {
             if (parsedRidesData.length === 0) {
                 showMessage('No rides to submit.', 'warning');
                 return;

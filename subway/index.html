@@ -299,10 +299,13 @@
           lineSelect.appendChild(opt);
         });
 
-        // Set date input to current date
+        // Set date input to current date in EST
         const rideDateInput = document.getElementById('rideDate');
         const today = new Date();
-        const currentDate = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        // Convert to EST by adjusting for timezone offset
+        const estOffset = -5 * 60; // EST is UTC-5 (in minutes)
+        const estDate = new Date(today.getTime() + (estOffset - today.getTimezoneOffset()) * 60000);
+        const currentDate = estDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
         rideDateInput.value = currentDate;
 
         fetchRides();
