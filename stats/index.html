@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NYC Subway Tracker - Statistics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --border-color: #333;
+            --highlight-color: #1e1e1e;
+            --input-bg: #1e1e1e;
+            --input-border: #444;
+            --button-bg: #333;
+            --button-text: #fff;
+            --button-active: #555;
+            --primary-color: #4CAF50;
+            --secondary-color: #2196F3;
+            --accent-color: #FF9800;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+
+        .header {
+            background-color: var(--highlight-color);
+            padding: 1.5rem 2rem;
+            border-bottom: 2px solid var(--border-color);
+            text-align: center;
+        }
+
+        .header h1 {
+            margin-bottom: 0.5rem;
+            color: var(--primary-color);
+        }
+
+        .header p {
+            color: #bbb;
+            font-size: 1.1rem;
+        }
+
+        .nav-links {
+            margin-top: 1rem;
+        }
+
+        .nav-links a {
+            color: var(--secondary-color);
+            text-decoration: none;
+            margin: 0 1rem;
+            font-size: 1rem;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .filter-bar {
+            background-color: var(--highlight-color);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .filter-button {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: 1px solid var(--input-border);
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .filter-button:hover {
+            background-color: var(--button-active);
+            transform: translateY(-2px);
+        }
+
+        .filter-button.active {
+            background-color: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            background-color: var(--highlight-color);
+            padding: 2rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .chart-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--primary-color);
+            text-align: center;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 400px;
+            margin-bottom: 1rem;
+        }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 400px;
+            color: #888;
+            font-size: 1.2rem;
+        }
+
+        .error {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 400px;
+            color: #ff6b6b;
+            text-align: center;
+            flex-direction: column;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background-color: var(--highlight-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+        }
+
+        .summary-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-label {
+            color: #bbb;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .filter-bar {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .chart-container {
+                padding: 1rem;
+            }
+
+            .summary-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .no-data {
+            text-align: center;
+            color: #888;
+            font-style: italic;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>🚇 NYC Subway Statistics</h1>
+        <p>Comprehensive analytics of your subway ride data</p>
+        <div class="nav-links">
+            <a href="../">← Back to Tracker</a>
+            <a href="../subway">Add Ride</a>
+            <a href="../subway/import-ride">Import from Maps</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="filter-bar">
+            <button class="filter-button active" data-filter="all">All Time</button>
+            <button class="filter-button" data-filter="year">This Year</button>
+            <button class="filter-button" data-filter="month">This Month</button>
+            <button class="filter-button" data-filter="week">This Week</button>
+            <button class="filter-button" data-filter="day">Today</button>
+        </div>
+
+        <div class="summary-stats" id="summaryStats">
+            <div class="summary-card">
+                <div class="summary-value" id="totalRides">-</div>
+                <div class="summary-label">Total Rides</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="uniqueStops">-</div>
+                <div class="summary-label">Unique Stops</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="uniqueLines">-</div>
+                <div class="summary-label">Lines Used</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="transferRate">-</div>
+                <div class="summary-label">Transfer Rate</div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="chart-container">
+                <div class="chart-title">Most Visited Stops</div>
+                <div class="chart-wrapper">
+                    <canvas id="visitedStopsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Most Transferred At Stops</div>
+                <div class="chart-wrapper">
+                    <canvas id="transferStopsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Most Popular Lines</div>
+                <div class="chart-wrapper">
+                    <canvas id="popularLinesChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title">Rides Over Time</div>
+                <div class="chart-wrapper">
+                    <canvas id="ridesOverTimeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const backendUrl = 'http://localhost:8001';
+        let currentFilter = 'all';
+        let charts = {};
+
+        // Chart color schemes
+        const colors = {
+            primary: '#4CAF50',
+            secondary: '#2196F3',
+            accent: '#FF9800',
+            danger: '#F44336',
+            warning: '#FFC107',
+            info: '#00BCD4',
+            gradient: [
+                '#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0',
+                '#607D8B', '#795548', '#3F51B5', '#009688', '#FFC107'
+            ]
+        };
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupFilterButtons();
+            await loadAllData();
+        });
+
+        // Setup filter button functionality
+        function setupFilterButtons() {
+            document.querySelectorAll('.filter-button').forEach(button => {
+                button.addEventListener('click', async () => {
+                    // Update active button
+                    document.querySelectorAll('.filter-button').forEach(b => b.classList.remove('active'));
+                    button.classList.add('active');
+
+                    // Update current filter and reload data
+                    currentFilter = button.dataset.filter;
+                    await loadAllData();
+                });
+            });
+        }
+
+        // Get date filter for API calls
+        function getDateFilter() {
+            const now = new Date();
+            const est = new Date(now.getTime() + (-5 * 60 - now.getTimezoneOffset()) * 60000);
+
+            switch (currentFilter) {
+                case 'day':
+                    return est.toISOString().split('T')[0];
+                case 'week':
+                    const weekAgo = new Date(est);
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    return weekAgo.toISOString().split('T')[0];
+                case 'month':
+                    const monthAgo = new Date(est);
+                    monthAgo.setMonth(monthAgo.getMonth() - 1);
+                    return monthAgo.toISOString().split('T')[0];
+                case 'year':
+                    const yearAgo = new Date(est);
+                    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+                    return yearAgo.toISOString().split('T')[0];
+                default:
+                    return null;
+            }
+        }
+
+        // Load all data and update charts
+        async function loadAllData() {
+            try {
+                showLoading();
+                const dateFilter = getDateFilter();
+                const params = dateFilter ? `?since=${dateFilter}` : '';
+
+                // Fetch all data
+                const [ridesResponse, visitedResponse, transfersResponse, linesResponse] = await Promise.all([
+                    fetch(`${backendUrl}/rides${params}`),
+                    fetch(`${backendUrl}/stats/visited-stops${params}`),
+                    fetch(`${backendUrl}/stats/transfer-stops${params}`),
+                    fetch(`${backendUrl}/stats/popular-lines${params}`)
+                ]);
+
+                if (!ridesResponse.ok || !visitedResponse.ok || !transfersResponse.ok || !linesResponse.ok) {
+                    throw new Error('Failed to fetch data from server');
+                }
+
+                const rides = await ridesResponse.json();
+                const visitedStops = await visitedResponse.json();
+                const transferStops = await transfersResponse.json();
+                const popularLines = await linesResponse.json();
+
+                // Update summary stats
+                updateSummaryStats(rides, visitedStops, transferStops, popularLines);
+
+                // Update charts
+                updateVisitedStopsChart(visitedStops);
+                updateTransferStopsChart(transferStops);
+                updatePopularLinesChart(popularLines);
+                updateRidesOverTimeChart(rides);
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Failed to load statistics data. Please check your connection and try again.');
+            }
+        }
+
+        function showLoading() {
+            document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+                wrapper.innerHTML = '<div class="loading">Loading data...</div>';
+            });
+        }
+
+        function showError(message) {
+            document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+                wrapper.innerHTML = `<div class="error"><strong>Error:</strong><br>${message}</div>`;
+            });
+        }
+
+        // Update summary statistics
+        function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
+            const totalRides = rides.length;
+            const uniqueStops = new Set([...rides.map(r => r.board_stop), ...rides.map(r => r.depart_stop)]).size;
+            const uniqueLines = new Set(rides.map(r => r.line)).size;
+            const transfers = rides.filter(r => r.transferred).length;
+            const transferRate = totalRides > 0 ? Math.round((transfers / totalRides) * 100) : 0;
+
+            document.getElementById('totalRides').textContent = totalRides.toLocaleString();
+            document.getElementById('uniqueStops').textContent = uniqueStops;
+            document.getElementById('uniqueLines').textContent = uniqueLines;
+            document.getElementById('transferRate').textContent = `${transferRate}%`;
+        }
+
+        // Update visited stops chart
+        function updateVisitedStopsChart(data) {
+            const ctx = document.getElementById('visitedStopsChart').getContext('2d');
+
+            if (charts.visitedStops) {
+                charts.visitedStops.destroy();
+            }
+
+            if (!data || data.length === 0) {
+                document.querySelector('#visitedStopsChart').parentElement.innerHTML =
+                    '<div class="no-data">No data available for this time period</div>';
+                return;
+            }
+
+            charts.visitedStops = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.slice(0, 10).map(item => item.stop_name),
+                    datasets: [{
+                        label: 'Visits',
+                        data: data.slice(0, 10).map(item => item.visit_count),
+                        backgroundColor: colors.gradient,
+                        borderColor: colors.primary,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#e0e0e0',
+                                maxRotation: 45
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update transfer stops chart
+        function updateTransferStopsChart(data) {
+            const ctx = document.getElementById('transferStopsChart').getContext('2d');
+
+            if (charts.transferStops) {
+                charts.transferStops.destroy();
+            }
+
+            if (!data || data.length === 0) {
+                document.querySelector('#transferStopsChart').parentElement.innerHTML =
+                    '<div class="no-data">No transfer data available for this time period</div>';
+                return;
+            }
+
+            charts.transferStops = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.slice(0, 10).map(item => item.stop_name),
+                    datasets: [{
+                        label: 'Transfers',
+                        data: data.slice(0, 10).map(item => item.transfer_count),
+                        backgroundColor: colors.gradient,
+                        borderColor: colors.secondary,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#e0e0e0',
+                                maxRotation: 45
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update popular lines chart
+        function updatePopularLinesChart(data) {
+            const ctx = document.getElementById('popularLinesChart').getContext('2d');
+
+            if (charts.popularLines) {
+                charts.popularLines.destroy();
+            }
+
+            if (!data || data.length === 0) {
+                document.querySelector('#popularLinesChart').parentElement.innerHTML =
+                    '<div class="no-data">No line data available for this time period</div>';
+                return;
+            }
+
+            charts.popularLines = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.slice(0, 10).map(item => item.line),
+                    datasets: [{
+                        label: 'Rides',
+                        data: data.slice(0, 10).map(item => item.ride_count),
+                        backgroundColor: colors.gradient,
+                        borderColor: colors.accent,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update rides over time chart
+        function updateRidesOverTimeChart(rides) {
+            const ctx = document.getElementById('ridesOverTimeChart').getContext('2d');
+
+            if (charts.ridesOverTime) {
+                charts.ridesOverTime.destroy();
+            }
+
+            if (!rides || rides.length === 0) {
+                document.querySelector('#ridesOverTimeChart').parentElement.innerHTML =
+                    '<div class="no-data">No ride data available for this time period</div>';
+                return;
+            }
+
+            // Group rides by date
+            const ridesByDate = rides.reduce((acc, ride) => {
+                const date = ride.date;
+                acc[date] = (acc[date] || 0) + 1;
+                return acc;
+            }, {});
+
+            // Sort dates and prepare data
+            const sortedDates = Object.keys(ridesByDate).sort();
+            const rideCounts = sortedDates.map(date => ridesByDate[date]);
+
+            charts.ridesOverTime = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedDates,
+                    datasets: [{
+                        label: 'Rides per Day',
+                        data: rideCounts,
+                        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                        borderColor: colors.primary,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: '#e0e0e0'
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                color: '#e0e0e0',
+                                maxRotation: 45
+                            },
+                            grid: {
+                                color: '#333'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

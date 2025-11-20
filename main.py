@@ -22,6 +22,9 @@ from controllers.ride_controller import (
     delete_ride,
     delete_all_rides,
     export_rides_csv,
+    get_visited_stops_stats,
+    get_transfer_stops_stats,
+    get_popular_lines_stats,
     RideCreate,
     UrlParseRequest,
     SuggestStationsRequest
@@ -78,6 +81,11 @@ def register_routes(app: FastAPI):
     # URL parsing and station suggestion routes
     app.post("/parse-url/")(parse_url)
     app.post("/suggest-stations/")(suggest_stations)
+    
+    # Statistics routes
+    app.get("/stats/visited-stops")(get_visited_stops_stats)
+    app.get("/stats/transfer-stops")(get_transfer_stops_stats)
+    app.get("/stats/popular-lines")(get_popular_lines_stats)
     
     # Utility routes
     app.post("/add-test-data")(add_test_data)

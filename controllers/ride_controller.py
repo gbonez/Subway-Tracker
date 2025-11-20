@@ -316,3 +316,100 @@ async def export_rides_csv(db: Session = Depends(get_db)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export CSV: {str(e)}")
+
+# -------------------------------
+# STATISTICS ENDPOINTS
+# -------------------------------
+async def get_visited_stops_stats(since: str = None, db: Session = Depends(get_db)):
+    """Get most visited stops statistics"""
+    try:
+        query = db.query(
+            SubwayRide.board_stop.label('stop_name'),
+            func.count(SubwayRide.board_stop).label('visit_count')
+        )
+        
+        # Apply date filter if provided
+        if since:
+            query = query.filter(SubwayRide.date >= since)
+            
+        # Group by stop and count visits (boarding stops)
+        board_stops = query.group_by(SubwayRide.board_stop).all()
+        
+        # Also count departing stops
+        depart_query = db.query(
+            SubwayRide.depart_stop.label('stop_name'),
+            func.count(SubwayRide.depart_stop).label('visit_count')
+        )
+        
+        if since:
+            depart_query = depart_query.filter(SubwayRide.date >= since)
+            
+        depart_stops = depart_query.group_by(SubwayRide.depart_stop).all()
+        
+        # Combine and aggregate stop counts
+        stop_counts = {}
+        for stop in board_stops:
+            stop_counts[stop.stop_name] = stop_counts.get(stop.stop_name, 0) + stop.visit_count
+            
+        for stop in depart_stops:
+            stop_counts[stop.stop_name] = stop_counts.get(stop.stop_name, 0) + stop.visit_count
+        
+        # Convert to list and sort by count
+        result = [
+            {"stop_name": stop, "visit_count": count}
+            for stop, count in stop_counts.items()
+        ]
+        result.sort(key=lambda x: x['visit_count'], reverse=True)
+        
+        return result[:10]  # Top 10
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get visited stops stats: {str(e)}")
+
+async def get_transfer_stops_stats(since: str = None, db: Session = Depends(get_db)):
+    """Get most transferred at stops statistics"""
+    try:
+        query = db.query(
+            SubwayRide.depart_stop.label('stop_name'),
+            func.count(SubwayRide.depart_stop).label('transfer_count')
+        ).filter(SubwayRide.transferred == True)
+        
+        # Apply date filter if provided
+        if since:
+            query = query.filter(SubwayRide.date >= since)
+            
+        result = query.group_by(SubwayRide.depart_stop).order_by(
+            func.count(SubwayRide.depart_stop).desc()
+        ).limit(10).all()
+        
+        return [
+            {"stop_name": row.stop_name, "transfer_count": row.transfer_count}
+            for row in result
+        ]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get transfer stops stats: {str(e)}")
+
+async def get_popular_lines_stats(since: str = None, db: Session = Depends(get_db)):
+    """Get most popular lines statistics"""
+    try:
+        query = db.query(
+            SubwayRide.line,
+            func.count(SubwayRide.line).label('ride_count')
+        )
+        
+        # Apply date filter if provided
+        if since:
+            query = query.filter(SubwayRide.date >= since)
+            
+        result = query.group_by(SubwayRide.line).order_by(
+            func.count(SubwayRide.line).desc()
+        ).limit(10).all()
+        
+        return [
+            {"line": row.line, "ride_count": row.ride_count}
+            for row in result
+        ]
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get popular lines stats: {str(e)}")
