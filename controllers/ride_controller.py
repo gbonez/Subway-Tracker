@@ -2,7 +2,7 @@
 FastAPI route controllers for the NYC Subway Tracker
 Handles HTTP requests and responses for ride management and URL parsing
 """
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from datetime import date
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from io import StringIO
 import csv
-from typing import List
+from typing import List, Optional
 
 from models import SubwayRide, get_db
 from services.transit_service import extract_transit_info_with_api, ParsedRide
@@ -320,7 +320,7 @@ async def export_rides_csv(db: Session = Depends(get_db)):
 # -------------------------------
 # STATISTICS ENDPOINTS
 # -------------------------------
-async def get_visited_stops_stats(since: str = None, db: Session = Depends(get_db)):
+async def get_visited_stops_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Get most visited stops statistics"""
     try:
         query = db.query(
@@ -366,7 +366,7 @@ async def get_visited_stops_stats(since: str = None, db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get visited stops stats: {str(e)}")
 
-async def get_transfer_stops_stats(since: str = None, db: Session = Depends(get_db)):
+async def get_transfer_stops_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Get most transferred at stops statistics"""
     try:
         query = db.query(
@@ -390,7 +390,7 @@ async def get_transfer_stops_stats(since: str = None, db: Session = Depends(get_
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get transfer stops stats: {str(e)}")
 
-async def get_popular_lines_stats(since: str = None, db: Session = Depends(get_db)):
+async def get_popular_lines_stats(since: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Get most popular lines statistics"""
     try:
         query = db.query(
