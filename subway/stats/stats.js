@@ -610,7 +610,11 @@ function updateVisitedStopsChart(data, rides) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        color: '#e0e0e0'
+                        color: '#e0e0e0',
+                        stepSize: 1,
+                        callback: function (value) {
+                            return Number.isInteger(value) ? value : '';
+                        }
                     },
                     grid: {
                         color: '#333'
@@ -703,7 +707,11 @@ function updateTransferStopsChart(data, rides) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        color: '#e0e0e0'
+                        color: '#e0e0e0',
+                        stepSize: 1,
+                        callback: function (value) {
+                            return Number.isInteger(value) ? value : '';
+                        }
                     },
                     grid: {
                         color: '#333'
@@ -783,7 +791,11 @@ function updatePopularLinesChart(data) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        color: '#e0e0e0'
+                        color: '#e0e0e0',
+                        stepSize: 1,
+                        callback: function (value) {
+                            return Number.isInteger(value) ? value : '';
+                        }
                     },
                     grid: {
                         color: '#333'
@@ -871,7 +883,11 @@ function updateRidesOverTimeChart(rides) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        color: '#e0e0e0'
+                        color: '#e0e0e0',
+                        stepSize: 1,
+                        callback: function (value) {
+                            return Number.isInteger(value) ? value : '';
+                        }
                     },
                     grid: {
                         color: '#333'

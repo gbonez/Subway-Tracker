@@ -286,7 +286,7 @@
             <p>Paste a Google Maps link with transit directions to automatically extract subway route information:</p>
 
             <label for="mapsUrl">Google Maps Link:</label>
-            <input type="url" id="mapsUrl" placeholder="https://maps.app.goo.gl/...">
+            <input type="url" id="mapsUrl" placeholder="https://www.google.com/maps/... or https://maps.app.goo.gl/...">
 
             <div class="info-box">
                 <h3>How to get a Google Maps link:</h3>
@@ -298,7 +298,10 @@
                     <li>Paste the link above and click "Import Route"</li>
                 </ol>
                 <p style="margin: 0.5em 0; font-size: 0.9em; color: #888;">
-                    <strong>Example:</strong> https://maps.app.goo.gl/aw1zvsxHDKhZEbsv5
+                    <strong>Example URLs that work:</strong><br>
+                    • https://www.google.com/maps/dir/...<br>
+                    • https://maps.google.com/...<br>
+                    • https://maps.app.goo.gl/...
                 </p>
             </div>
 
@@ -372,9 +375,20 @@
         function isValidGoogleMapsUrl(url) {
             try {
                 const urlObj = new URL(url);
-                return urlObj.hostname.includes('maps.google.com') ||
-                    urlObj.hostname.includes('maps.app.goo.gl') ||
-                    urlObj.hostname.includes('goo.gl');
+                const hostname = urlObj.hostname || '';
+                const path = urlObj.pathname || '';
+
+                // Support various Google Maps URL formats:
+                // - https://maps.google.com/...
+                // - https://www.google.com/maps/...
+                // - https://maps.app.goo.gl/...
+                // - https://goo.gl/maps/...
+                return (
+                    hostname.includes('maps.google.com') ||
+                    (hostname.includes('google.com') && path.includes('/maps')) ||
+                    hostname.includes('maps.app.goo.gl') ||
+                    hostname.includes('goo.gl')
+                );
             } catch {
                 return false;
             }
@@ -389,7 +403,7 @@
             }
 
             if (!isValidGoogleMapsUrl(mapsUrl)) {
-                showMessage('Please enter a valid Google Maps link. The link should start with https://maps.google.com or https://maps.app.goo.gl', 'warning');
+                showMessage('Please enter a valid Google Maps link. The link should be from Google Maps (maps.google.com, www.google.com/maps, or maps.app.goo.gl)', 'warning');
                 return;
             }
 
