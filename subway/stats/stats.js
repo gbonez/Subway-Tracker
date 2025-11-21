@@ -473,7 +473,11 @@ function getDateFilter() {
             };
         case 'week':
             start = new Date(now);
-            start.setDate(now.getDate() - 7);
+            // Get start of current week (Sunday = 0, Monday = 1, etc.)
+            // In the US, week typically starts on Sunday, so we'll use that
+            const dayOfWeek = start.getDay(); // 0 = Sunday, 1 = Monday, etc.
+            start.setDate(start.getDate() - dayOfWeek);
+            start.setHours(0, 0, 0, 0);
             return {
                 start: start.toISOString().split('T')[0],
                 end: now.toISOString().split('T')[0]
