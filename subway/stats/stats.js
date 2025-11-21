@@ -109,6 +109,101 @@ const mtaLineColors = {
     'SIR': '#0039A6' // Blue (Staten Island Railway)
 };
 
+// Borough mapping for subway stations
+const boroughMapping = {
+    'Manhattan': [
+        '103 St', '116 St-Columbia University', '125 St', '137 St-City College', '14 St', '14 St-Union Sq',
+        '145 St', '157 St', '168 St-Washington Hts', '18 St', '181 St', '191 St', '207 St', '215 St',
+        '23 St', '231 St', '238 St', '28 St', '34 St-Penn Station', '34 St-Herald Sq', '42 St-Bryant Pk',
+        '47-50 Sts-Rockefeller Ctr', '5 Ave', '5 Ave/53 St', '5 Ave/59 St', '50 St', '51 St', '52 St',
+        '53 St', '57 St', '57 St-7 Ave', '59 St', '59 St-Columbus Circle', '66 St-Lincoln Center',
+        '68 St-Hunter College', '72 St', '77 St', '79 St', '8 St-NYU', '86 St', '96 St',
+        'Astor Pl', 'Bleecker St', 'Bowling Green', 'Broadway-Lafayette St', 'Brooklyn Bridge-City Hall',
+        'Canal St', 'Cathedral Pkwy (110 St)', 'Central Park North (110 St)', 'Chambers St',
+        'Christopher St-Stonewall', 'City Hall', 'Cortlandt St', 'Delancey St-Essex St', 'Dyckman St',
+        'East Broadway', 'Franklin St', 'Fulton St', 'Grand Central-42 St', 'Houston St', 'Lexington Ave/53 St',
+        'Lexington Ave/63 St', 'Marble Hill-225 St', 'Rector St', 'South Ferry', 'Spring St',
+        'Times Sq-42 St', 'Van Cortlandt Park-242 St', 'W 4 St-Wash Sq', 'Wall St', 'WTC Cortlandt',
+        'Whitehall St-South Ferry', 'World Trade Center', '33 St', '116 St', '135 St', 'Harlem-148 St',
+        '2 Ave', '7 Ave', 'Bowery'
+    ],
+    'Brooklyn': [
+        'Atlantic Ave-Barclays Ctr', 'Bergen St', 'Beverly Rd', 'Borough Hall', 'Church Ave', 'Clark St',
+        'Crown Hts-Utica Ave', 'Eastern Pkwy-Brooklyn Museum', 'Flatbush Ave-Brooklyn College',
+        'Franklin Ave-Medgar Evers College', 'Grand Army Plaza', 'Hoyt St', 'Nevins St',
+        'Newkirk Ave-Little Haiti', 'Park Place', 'President St-Medgar Evers College', 'Sterling St',
+        'Winthrop St', '15 St-Prospect Park', '18 Ave', '4 Ave-9 St', 'Avenue I', 'Avenue N',
+        'Avenue P', 'Avenue U', 'Avenue X', 'Bay Pkwy', 'Carroll St', 'Coney Island-Stillwell Ave',
+        'Ditmas Ave', 'Fort Hamilton Pkwy', 'Jay St-MetroTech', 'Kings Hwy', 'Neptune Ave',
+        'Smith-9 Sts', 'W 8 St-NY Aquarium', 'York St', '25 St', '36 St', '45 St', '49 St',
+        '77 St', 'Bay Ridge Ave', 'Bay Ridge-95 St', 'Court St', 'DeKalb Ave', 'Prospect Heights',
+        'Greenpoint Ave', 'Nassau Ave', 'New Utrecht Ave', '20 Ave', '25 Ave', '86 St', 'Prospect Park',
+        'Franklin Ave', 'Nostrand Ave', 'Junius St', 'Kingston Ave', 'New Lots Ave', 'Pennsylvania Ave',
+        'Rockaway Ave', 'Saratoga Ave', 'Sutter Ave-Rutland Rd', 'Van Siclen Ave', 'Chauncey St',
+        'Gates Ave', 'Halsey St', 'Kosciuszko St', 'Myrtle Ave', 'Broadway Junction', 'Alabama Ave',
+        '75 St-Elderts Ln', '85 St-Forest Pkwy', 'Cypress Hills', 'Norwood Ave', 'Cleveland St',
+        'Crescent St', 'Hewes St', 'Lorimer St', 'Marcy Ave', 'Myrtle-Wyckoff Aves', 'Seneca Ave',
+        'Fresh Pond Rd', 'Middle Village-Metropolitan Ave', 'Metropolitan Ave', 'Grand Ave-Newtown',
+        'Montrose Ave', 'Morgan Ave', 'Jefferson St', 'DeKalb Ave', 'Flushing Ave', 'Clinton-Washington Aves',
+        'Classon Ave', 'Botanic Garden'
+    ],
+    'Queens': [
+        '103 St-Corona Plaza', '111 St', '33 St-Rawson St', '34 St-Hudson Yards', '40 St-Lowery St',
+        '46 St-Bliss St', '61 St-Woodside', '69 St', '74 St-Broadway', '82 St-Jackson Hts',
+        '90 St-Elmhurst Ave', 'Court Sq', 'Court Sq-23 St', 'Flushing-Main St', 'Hunters Point Ave',
+        'Junction Blvd', 'Mets-Willets Point', 'Queensboro Plaza', 'Vernon Blvd-Jackson Ave',
+        '63 Dr-Rego Park', '67 Ave', 'Central Ave', 'Elmhurst Ave', 'Forest Ave', 'Forest Hills-71 Ave',
+        'Jackson Hts-Roosevelt Ave', 'Knickerbocker Ave', 'Northern Blvd', 'Queens Plaza',
+        'Steinway St', 'Woodhaven Blvd', '104 St', '121 St', 'Jamaica Center-Parsons/Archer',
+        'Sutphin Blvd-Archer Ave-JFK Airport', 'Sutphin Blvd', '169 St', '21 St-Queensbridge',
+        '75 Ave', 'Briarwood', 'Jamaica-179 St', 'Kew Gardens-Union Tpke', 'Parsons Blvd',
+        'Roosevelt Island', '65 St', 'Grand Ave-Newtown', 'Woodhaven Blvd',
+        'Beach 105 St', 'Beach 90 St', 'Beach 98 St', 'Broad Channel', 'Rockaway Park-Beach 116 St'
+    ],
+    'The Bronx': [
+        '149 St-Grand Concourse', '174 St', '219 St', '225 St', '233 St', '3 Ave-149 St',
+        'Allerton Ave', 'Bronx Park East', 'Burke Ave', 'E 180 St', 'Freeman St', 'Gun Hill Rd',
+        'Intervale Ave', 'Jackson Ave', 'Nereid Ave', 'Pelham Pkwy', 'Prospect Ave', 'Simpson St',
+        'Wakefield-241 St', 'West Farms Sq-E Tremont Ave', '138 St-Grand Concourse', '161 St-Yankee Stadium',
+        '167 St', '170 St', '176 St', '183 St', 'Bedford Park Blvd-Lehman College', 'Burnside Ave',
+        'Fordham Rd', 'Kingsbridge Rd', 'Mosholu Pkwy', 'Mt Eden Ave', 'Woodlawn', '3 Ave-138 St',
+        'Brook Ave', 'Cypress Ave', 'E 143 St-St Mary\'s St', 'E 149 St', 'Elder Ave', 'Hunts Point Ave',
+        'Longwood Ave', 'Middletown Rd', 'Morrison Ave-Soundview', 'Parkchester', 'Pelham Bay Park',
+        'St Lawrence Ave', 'Westchester Sq-E Tremont Ave', 'Whitlock Ave', 'Zerega Ave',
+        'Baychester Ave', 'Eastchester-Dyre Ave', 'Morris Park', 'Buhre Ave', 'Castle Hill Ave'
+    ],
+    'Staten Island': [
+        'Annadale', 'Arthur Kill', 'Bay Terrace', 'Clifton', 'Dongan Hills', 'Eltingville',
+        'Grant City', 'Grasmere', 'Great Kills', 'Huguenot', 'Jefferson Ave', 'New Dorp',
+        'Oakwood Heights', 'Old Town', 'Pleasant Plains', 'Prince\'s Bay', 'Richmond Valley',
+        'St George', 'Stapleton', 'Tompkinsville', 'Tottenville'
+    ]
+};
+
+// Get borough for a station
+function getStationBorough(stationName) {
+    for (const [borough, stations] of Object.entries(boroughMapping)) {
+        if (stations.some(station =>
+            stationName.toLowerCase().includes(station.toLowerCase()) ||
+            station.toLowerCase().includes(stationName.toLowerCase()) ||
+            stationName === station
+        )) {
+            return borough;
+        }
+    }
+    return 'Unknown';
+}
+
+// Borough colors for pie chart
+const boroughColors = {
+    'Manhattan': '#FF6B6B',
+    'Brooklyn': '#4ECDC4',
+    'Queens': '#45B7D1',
+    'The Bronx': '#96CEB4',
+    'Staten Island': '#FFEAA7',
+    'Unknown': '#808183'
+};
+
 // Get MTA color for a line
 function getMTAColor(line) {
     return mtaLineColors[line] || '#808183'; // Default to gray if line not found
@@ -504,6 +599,7 @@ async function loadAllData() {
         updateVisitedStopsChart(visitedStops, ridesArray);
         updateTransferStopsChart(transferStops, ridesArray);
         updatePopularLinesChart(popularLines);
+        updateBoroughChart(ridesArray);
         updateRidesOverTimeChart(ridesArray);
         console.log('🎨 Chart updates completed');
 
@@ -538,7 +634,7 @@ function showError(message) {
 
 // Ensure all canvas elements exist and are properly initialized
 function ensureCanvasElements() {
-    const canvasIds = ['visitedStopsChart', 'transferStopsChart', 'popularLinesChart', 'ridesOverTimeChart'];
+    const canvasIds = ['visitedStopsChart', 'transferStopsChart', 'popularLinesChart', 'boroughChart', 'ridesOverTimeChart'];
 
     canvasIds.forEach(id => {
         let canvas = document.getElementById(id);
@@ -546,7 +642,7 @@ function ensureCanvasElements() {
             console.log(`🔧 Creating missing canvas element: ${id}`);
             // Find the wrapper for this chart
             const allWrappers = document.querySelectorAll('.chart-wrapper');
-            const chartTitles = ['Most Visited Stops', 'Most Transferred At Stops', 'Most Popular Lines', 'Rides Over Time'];
+            const chartTitles = ['Most Visited Stops', 'Most Transferred At Stops', 'Most Popular Lines', 'Most Visited Boroughs', 'Rides Over Time'];
             const chartIndex = canvasIds.indexOf(id);
 
             if (chartIndex >= 0 && allWrappers[chartIndex]) {
@@ -593,17 +689,47 @@ function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
     const transfers = rides.filter(r => r.transferred === true || r.transferred === 1).length;
     const transferRate = totalRides > 0 ? Math.round((transfers / totalRides) * 100) : 0;
 
+    // Calculate favorites
+    const consolidatedVisitedStops = consolidateStopsByLines(visitedStops, rides);
+    const favoriteStop = consolidatedVisitedStops.length > 0 ? shortenStationName(consolidatedVisitedStops[0].stop_name, 12) : '-';
+
+    const favoriteLine = popularLines.length > 0 ? popularLines[0].line : '-';
+
+    // Calculate favorite borough
+    const boroughCounts = {};
+    rides.forEach(ride => {
+        [ride.board_stop, ride.depart_stop].forEach(stop => {
+            if (stop) {
+                const borough = getStationBorough(stop);
+                boroughCounts[borough] = (boroughCounts[borough] || 0) + 1;
+            }
+        });
+    });
+
+    const sortedBoroughs = Object.entries(boroughCounts)
+        .filter(([borough]) => borough !== 'Unknown')
+        .sort(([, a], [, b]) => b - a);
+    const favoriteBorough = sortedBoroughs.length > 0 ? sortedBoroughs[0][0] : '-';
+
     // Update display with animation
     animateValue('totalRides', parseInt(document.getElementById('totalRides').textContent) || 0, totalRides);
     animateValue('uniqueStops', parseInt(document.getElementById('uniqueStops').textContent) || 0, uniqueStops);
     animateValue('uniqueLines', parseInt(document.getElementById('uniqueLines').textContent) || 0, uniqueLines);
     animateValue('transferRate', parseInt(document.getElementById('transferRate').textContent) || 0, transferRate, '%');
 
+    // Update favorites (no animation for text)
+    document.getElementById('favoriteStop').textContent = favoriteStop;
+    document.getElementById('favoriteLine').textContent = favoriteLine;
+    document.getElementById('favoriteBorough').textContent = favoriteBorough;
+
     console.log('📊 Summary stats updated:', {
         totalRides,
         uniqueStops,
         uniqueLines,
-        transferRate: `${transferRate}%`
+        transferRate: `${transferRate}%`,
+        favoriteStop,
+        favoriteLine,
+        favoriteBorough
     });
 }
 
@@ -702,8 +828,7 @@ function updateVisitedStopsChart(data, rides) {
                             const item = top10Data[index];
                             if (item.lines && item.lines.length > 0) {
                                 const lineDisplay = item.lines.join('/');
-                                const complexInfo = item.is_transfer_complex ? ' (Transfer Complex)' : '';
-                                return `Lines: ${lineDisplay}${complexInfo}`;
+                                return `Lines: ${lineDisplay}`;
                             }
                             return '';
                         },
@@ -855,6 +980,104 @@ function updateTransferStopsChart(data, rides) {
     console.log('✅ Transfer stops chart created successfully');
 }
 
+// Update borough chart
+function updateBoroughChart(rides) {
+    const chartElement = document.getElementById('boroughChart');
+    if (!chartElement) {
+        console.error('❌ boroughChart element not found after ensureCanvasElements');
+        return;
+    }
+
+    console.log('🗽 Updating borough chart with', rides.length, 'rides');
+
+    // Destroy existing chart
+    if (charts.boroughChart) {
+        charts.boroughChart.destroy();
+        delete charts.boroughChart;
+    }
+
+    if (!rides || rides.length === 0) {
+        const chartWrapper = chartElement.closest('.chart-wrapper');
+        if (chartWrapper) {
+            chartWrapper.innerHTML = '<div class="no-data">No ride data for this time period</div>';
+        }
+        return;
+    }
+
+    // Calculate borough visit counts
+    const boroughCounts = {};
+    rides.forEach(ride => {
+        [ride.board_stop, ride.depart_stop].forEach(stop => {
+            if (stop) {
+                const borough = getStationBorough(stop);
+                if (borough !== 'Unknown') {
+                    boroughCounts[borough] = (boroughCounts[borough] || 0) + 1;
+                }
+            }
+        });
+    });
+
+    const boroughData = Object.entries(boroughCounts)
+        .sort(([, a], [, b]) => b - a)
+        .map(([borough, count]) => ({
+            borough,
+            count,
+            color: boroughColors[borough] || boroughColors['Unknown']
+        }));
+
+    if (boroughData.length === 0) {
+        const chartWrapper = chartElement.closest('.chart-wrapper');
+        if (chartWrapper) {
+            chartWrapper.innerHTML = '<div class="no-data">No borough data for this time period</div>';
+        }
+        return;
+    }
+
+    const ctx = chartElement.getContext('2d');
+    if (!ctx) {
+        console.error('❌ Could not get canvas context for boroughChart');
+        return;
+    }
+
+    charts.boroughChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: boroughData.map(item => item.borough),
+            datasets: [{
+                data: boroughData.map(item => item.count),
+                backgroundColor: boroughData.map(item => item.color),
+                borderColor: '#333',
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#e0e0e0',
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return `${context.label}: ${context.parsed} visits (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    console.log('✅ Borough chart created successfully');
+}
+
 // Update popular lines chart
 function updatePopularLinesChart(data) {
     const chartElement = document.getElementById('popularLinesChart');
@@ -946,7 +1169,22 @@ function updateRidesOverTimeChart(rides) {
         return;
     }
 
-    console.log('🎯 Updating rides over time chart with', rides.length, 'rides');
+    console.log('🎯 Updating rides over time chart with', rides.length, 'rides for filter:', currentFilter);
+
+    // Don't render chart for single day
+    if (currentFilter === 'day') {
+        const chartWrapper = chartElement.closest('.chart-wrapper');
+        if (chartWrapper) {
+            chartWrapper.innerHTML = '<div class="no-data">Chart not available for single day view</div>';
+        }
+
+        // Update chart title
+        const titleElement = document.getElementById('ridesOverTimeTitle');
+        if (titleElement) {
+            titleElement.textContent = 'Rides Over Time';
+        }
+        return;
+    }
 
     // Destroy existing chart
     if (charts.ridesOverTime) {
@@ -968,29 +1206,125 @@ function updateRidesOverTimeChart(rides) {
         return;
     }
 
-    // Group rides by date
-    const ridesByDate = rides.reduce((acc, ride) => {
-        const date = ride.date || ride.created_at?.split('T')[0] || 'Unknown';
-        acc[date] = (acc[date] || 0) + 1;
-        return acc;
-    }, {});
+    let groupedData = {};
+    let chartTitle = 'Rides Over Time';
+    let labelFormat = '';
 
-    // Sort dates and prepare data
-    const sortedDates = Object.keys(ridesByDate).sort();
-    const rideCounts = sortedDates.map(date => ridesByDate[date]);
+    // Group rides based on current filter
+    if (currentFilter === 'all' || currentFilter === 'custom') {
+        // Show monthly data with year
+        chartTitle = 'Monthly Rides';
+        rides.forEach(ride => {
+            const date = new Date(ride.date || ride.created_at);
+            const monthKey = date.toLocaleDateString('en-US', {
+                month: 'short',
+                year: '2-digit',
+                timeZone: 'America/New_York'
+            });
+            groupedData[monthKey] = (groupedData[monthKey] || 0) + 1;
+        });
+    } else if (currentFilter === 'month') {
+        // Show weekly data (first date of week starting Monday)
+        chartTitle = 'Weekly Rides';
+        rides.forEach(ride => {
+            const date = new Date(ride.date || ride.created_at);
+            // Get Monday of the week
+            const dayOfWeek = date.getDay();
+            const monday = new Date(date);
+            monday.setDate(date.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+            const weekKey = monday.toLocaleDateString('en-US', {
+                month: 'numeric',
+                day: 'numeric',
+                timeZone: 'America/New_York'
+            });
+            groupedData[weekKey] = (groupedData[weekKey] || 0) + 1;
+        });
+    } else if (currentFilter === 'week') {
+        // Show daily data (day of week)
+        chartTitle = 'Daily Rides';
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        rides.forEach(ride => {
+            const date = new Date(ride.date || ride.created_at);
+            const dayKey = dayNames[date.getDay()];
+            groupedData[dayKey] = (groupedData[dayKey] || 0) + 1;
+        });
+
+        // Ensure all days are represented
+        dayNames.forEach(day => {
+            if (!(day in groupedData)) {
+                groupedData[day] = 0;
+            }
+        });
+    } else if (currentFilter === 'year') {
+        // Show monthly data without year
+        chartTitle = 'Monthly Rides This Year';
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        rides.forEach(ride => {
+            const date = new Date(ride.date || ride.created_at);
+            const monthKey = monthNames[date.getMonth()];
+            groupedData[monthKey] = (groupedData[monthKey] || 0) + 1;
+        });
+
+        // Ensure all months are represented
+        monthNames.forEach(month => {
+            if (!(month in groupedData)) {
+                groupedData[month] = 0;
+            }
+        });
+    }
+
+    // Update chart title
+    const titleElement = document.getElementById('ridesOverTimeTitle');
+    if (titleElement) {
+        titleElement.textContent = chartTitle;
+    }
+
+    // Sort data appropriately
+    let labels, values;
+    if (currentFilter === 'week') {
+        // Sort by day of week
+        const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        labels = dayOrder;
+        values = dayOrder.map(day => groupedData[day] || 0);
+    } else if (currentFilter === 'year') {
+        // Sort by month order
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        labels = monthOrder;
+        values = monthOrder.map(month => groupedData[month] || 0);
+    } else {
+        // Sort chronologically for other filters
+        labels = Object.keys(groupedData).sort((a, b) => {
+            if (currentFilter === 'month') {
+                // Parse MM/DD format for weekly view
+                const [monthA, dayA] = a.split('/').map(Number);
+                const [monthB, dayB] = b.split('/').map(Number);
+                const dateA = new Date(new Date().getFullYear(), monthA - 1, dayA);
+                const dateB = new Date(new Date().getFullYear(), monthB - 1, dayB);
+                return dateA - dateB;
+            } else {
+                // Parse "MMM YY" format for all-time view
+                const parseDate = (str) => {
+                    const [month, year] = str.split(' ');
+                    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
+                    return new Date(2000 + parseInt(year), monthIndex);
+                };
+                return parseDate(a) - parseDate(b);
+            }
+        });
+        values = labels.map(label => groupedData[label]);
+    }
 
     charts.ridesOverTime = new Chart(ctx, {
-        type: 'line',
+        type: 'bar',
         data: {
-            labels: sortedDates,
+            labels: labels,
             datasets: [{
-                label: 'Rides per Day',
-                data: rideCounts,
-                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                label: 'Rides',
+                data: values,
+                backgroundColor: colors.primary,
                 borderColor: colors.primary,
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4
+                borderWidth: 1
             }]
         },
         options: {

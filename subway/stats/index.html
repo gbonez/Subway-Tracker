@@ -145,7 +145,7 @@
 
         .summary-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 1em;
             margin-bottom: 2em;
         }
@@ -295,6 +295,18 @@
                 <div class="summary-value" id="transferRate">-</div>
                 <div class="summary-label">Transfer Rate</div>
             </div>
+            <div class="summary-card">
+                <div class="summary-value" id="favoriteStop">-</div>
+                <div class="summary-label">Favorite Stop</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="favoriteLine">-</div>
+                <div class="summary-label">Favorite Line</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-value" id="favoriteBorough">-</div>
+                <div class="summary-label">Favorite Borough</div>
+            </div>
         </div>
 
         <div class="stats-grid">
@@ -320,7 +332,14 @@
             </div>
 
             <div class="chart-container">
-                <div class="chart-title">Rides Over Time</div>
+                <div class="chart-title">Most Visited Boroughs</div>
+                <div class="chart-wrapper">
+                    <canvas id="boroughChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-title" id="ridesOverTimeTitle">Rides Over Time</div>
                 <div class="chart-wrapper">
                     <canvas id="ridesOverTimeChart"></canvas>
                 </div>
