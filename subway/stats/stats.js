@@ -114,6 +114,14 @@ function getMTAColor(line) {
     return mtaLineColors[line] || '#808183'; // Default to gray if line not found
 }
 
+// Shorten station names for display
+function shortenStationName(name, maxLength = 20) {
+    if (name.length <= maxLength) {
+        return name;
+    }
+    return name.substring(0, maxLength - 3) + '...';
+}
+
 // Load transfer stations mapping
 let transferStationsMapping = {};
 async function loadTransferStations() {
@@ -225,10 +233,23 @@ function consolidateStopsByLines(stopData, rides) {
                 consolidatedStops[consolidationKey].original_stations.push(stopName);
             }
 
-            // Update primary line if this station has higher usage
+            // Merge lines arrays to avoid duplicates
+            if (transferComplex) {
+                // Use transfer complex lines
+                consolidatedStops[consolidationKey].lines = [...new Set([...consolidatedStops[consolidationKey].lines, ...transferComplex.lines])];
+            } else {
+                // Add any new lines from this station
+                consolidatedStops[consolidationKey].lines = [...new Set([...consolidatedStops[consolidationKey].lines, ...allLinesAtStop])];
+            }
+
+            // Update primary line if this station has higher usage for a line
             if (stopLineUsage[stopName]) {
                 for (const [line, usage] of Object.entries(stopLineUsage[stopName])) {
-                    if (usage > maxUsage) {
+                    const totalUsageForThisLine = Object.values(consolidatedStops[consolidationKey].original_stations)
+                        .reduce((sum, station) => sum + (stopLineUsage[station]?.[line] || 0), 0);
+
+                    if (totalUsageForThisLine > maxUsage) {
+                        maxUsage = totalUsageForThisLine;
                         consolidatedStops[consolidationKey].primary_line = line;
                         consolidatedStops[consolidationKey].color = getMTAColor(line);
                     }
@@ -237,7 +258,9 @@ function consolidateStopsByLines(stopData, rides) {
         }
     });
 
-    return Object.values(consolidatedStops).sort((a, b) => b.count - a.count);
+    const result = Object.values(consolidatedStops).sort((a, b) => b.count - a.count);
+    console.log('🔄 Consolidated', stopData.length, 'stations into', result.length, 'entries');
+    return result;
 }
 
 // Consolidate line data and get colors
@@ -635,6 +658,13 @@ function updateVisitedStopsChart(data, rides) {
     const consolidatedData = consolidateStopsByLines(data, rides);
     const top10Data = consolidatedData.slice(0, 10);
 
+    // Log for debugging
+    console.log('📊 Chart data:', {
+        original: data.length,
+        consolidated: consolidatedData.length,
+        top10: top10Data.length
+    });
+
     const ctx = chartElement.getContext('2d');
     if (!ctx) {
         console.error('❌ Could not get canvas context for visitedStopsChart');
@@ -644,7 +674,7 @@ function updateVisitedStopsChart(data, rides) {
     charts.visitedStops = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: top10Data.map(item => item.stop_name),
+            labels: top10Data.map(item => shortenStationName(item.stop_name)),
             datasets: [{
                 label: 'Visits',
                 data: top10Data.map(item => item.count),
@@ -665,7 +695,7 @@ function updateVisitedStopsChart(data, rides) {
                         title: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
                             const item = top10Data[index];
-                            return item.stop_name;
+                            return item.stop_name; // Use full name in tooltip
                         },
                         afterTitle: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
@@ -741,6 +771,13 @@ function updateTransferStopsChart(data, rides) {
     const consolidatedData = consolidateStopsByLines(data, rides);
     const top10Data = consolidatedData.slice(0, 10);
 
+    // Log for debugging
+    console.log('📊 Transfer chart data:', {
+        original: data.length,
+        consolidated: consolidatedData.length,
+        top10: top10Data.length
+    });
+
     const ctx = chartElement.getContext('2d');
     if (!ctx) {
         console.error('❌ Could not get canvas context for transferStopsChart');
@@ -750,7 +787,7 @@ function updateTransferStopsChart(data, rides) {
     charts.transferStops = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: top10Data.map(item => item.stop_name),
+            labels: top10Data.map(item => shortenStationName(item.stop_name)),
             datasets: [{
                 label: 'Transfers',
                 data: top10Data.map(item => item.count),
@@ -771,7 +808,7 @@ function updateTransferStopsChart(data, rides) {
                         title: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
                             const item = top10Data[index];
-                            return item.stop_name;
+                            return item.stop_name; // Use full name in tooltip
                         },
                         afterTitle: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
