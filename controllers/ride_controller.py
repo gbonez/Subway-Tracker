@@ -381,7 +381,7 @@ async def get_visited_stops_stats(
         ]
         result.sort(key=lambda x: x['visit_count'], reverse=True)
         
-        return result[:10]  # Top 10
+        return result  # Return all data, let frontend handle consolidation and limiting
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get visited stops stats: {str(e)}")
@@ -407,7 +407,7 @@ async def get_transfer_stops_stats(
             
         result = query.group_by(SubwayRide.depart_stop).order_by(
             func.count(SubwayRide.depart_stop).desc()
-        ).limit(10).all()
+        ).all()  # Remove limit, let frontend handle consolidation and limiting
         
         return [
             {"stop_name": row.stop_name, "transfer_count": row.transfer_count}

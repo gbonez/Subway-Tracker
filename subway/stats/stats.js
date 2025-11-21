@@ -815,8 +815,7 @@ function updateTransferStopsChart(data, rides) {
                             const item = top10Data[index];
                             if (item.lines && item.lines.length > 0) {
                                 const lineDisplay = item.lines.join('/');
-                                const complexInfo = item.is_transfer_complex ? ' (Transfer Complex)' : '';
-                                return `Lines: ${lineDisplay}${complexInfo}`;
+                                return `Lines: ${lineDisplay}`;
                             }
                             return '';
                         },
