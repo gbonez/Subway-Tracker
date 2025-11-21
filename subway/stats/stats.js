@@ -196,15 +196,13 @@ function getStationBorough(stationName) {
 
 // Borough colors for pie chart
 const boroughColors = {
-    'Manhattan': '#FF6B6B',
-    'Brooklyn': '#4ECDC4',
-    'Queens': '#45B7D1',
-    'The Bronx': '#96CEB4',
-    'Staten Island': '#FFEAA7',
+    'Manhattan': '#EE352E', // Red
+    'Brooklyn': '#0039A6', // Blue  
+    'Queens': '#B933AD', // Purple
+    'The Bronx': '#00933C', // Green
+    'Staten Island': '#FCCC0A', // Yellow
     'Unknown': '#808183'
-};
-
-// Get MTA color for a line
+};// Get MTA color for a line
 function getMTAColor(line) {
     return mtaLineColors[line] || '#808183'; // Default to gray if line not found
 }
@@ -690,9 +688,6 @@ function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
     const transferRate = totalRides > 0 ? Math.round((transfers / totalRides) * 100) : 0;
 
     // Calculate favorites
-    const consolidatedVisitedStops = consolidateStopsByLines(visitedStops, rides);
-    const favoriteStop = consolidatedVisitedStops.length > 0 ? shortenStationName(consolidatedVisitedStops[0].stop_name, 12) : '-';
-
     const favoriteLine = popularLines.length > 0 ? popularLines[0].line : '-';
 
     // Calculate favorite borough
@@ -718,7 +713,6 @@ function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
     animateValue('transferRate', parseInt(document.getElementById('transferRate').textContent) || 0, transferRate, '%');
 
     // Update favorites (no animation for text)
-    document.getElementById('favoriteStop').textContent = favoriteStop;
     document.getElementById('favoriteLine').textContent = favoriteLine;
     document.getElementById('favoriteBorough').textContent = favoriteBorough;
 
@@ -727,7 +721,6 @@ function updateSummaryStats(rides, visitedStops, transferStops, popularLines) {
         uniqueStops,
         uniqueLines,
         transferRate: `${transferRate}%`,
-        favoriteStop,
         favoriteLine,
         favoriteBorough
     });
