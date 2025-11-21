@@ -1,0 +1,466 @@
+{
+    "14th Street/Union Square": {
+        "complex_name": "14th Street–Union Square",
+        "station_names": [
+            "14 St",
+            "14 St-Union Sq",
+            "14th Street–Union Square",
+            "Union Square",
+            "6 Ave",
+            "Sixth Avenue",
+            "8 Ave",
+            "Eighth Avenue"
+        ],
+        "lines": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "L",
+            "N",
+            "Q",
+            "R",
+            "W"
+        ],
+        "description": "Major transfer complex connecting IRT Broadway–Seventh Avenue Line, IRT Lexington Avenue Line, BMT Broadway Line, and BMT Canarsie Line"
+    },
+    "Times Square–42nd Street": {
+        "complex_name": "Times Square–42nd Street",
+        "station_names": [
+            "Times Sq-42 St",
+            "Times Square–42nd Street",
+            "Times Square",
+            "42nd Street–Port Authority Bus Terminal",
+            "Port Authority Bus Terminal"
+        ],
+        "lines": [
+            "1",
+            "2",
+            "3",
+            "7",
+            "N",
+            "Q",
+            "R",
+            "W",
+            "S",
+            "A",
+            "C",
+            "E"
+        ],
+        "description": "Busiest station complex in the system"
+    },
+    "Grand Central–42nd Street": {
+        "complex_name": "Grand Central–42nd Street",
+        "station_names": [
+            "Grand Central-42 St",
+            "Grand Central–42nd Street",
+            "Grand Central",
+            "42nd Street–Bryant Park",
+            "Fifth Avenue"
+        ],
+        "lines": [
+            "4",
+            "5",
+            "6",
+            "7",
+            "S",
+            "B",
+            "D",
+            "F",
+            "M"
+        ],
+        "description": "Major hub connecting IRT Lexington Avenue Line, IRT Flushing Line, IRT 42nd Street Shuttle, and IND Sixth Avenue Line"
+    },
+    "34th Street–Herald Square": {
+        "complex_name": "34th Street–Herald Square",
+        "station_names": [
+            "34 St-Herald Sq",
+            "34th Street–Herald Square",
+            "34 St-Penn Station"
+        ],
+        "lines": [
+            "1",
+            "2",
+            "3",
+            "A",
+            "C",
+            "E",
+            "B",
+            "D",
+            "F",
+            "M",
+            "N",
+            "Q",
+            "R",
+            "W"
+        ],
+        "description": "Transfer between BMT Broadway Line and IND Sixth Avenue Line, plus nearby Penn Station"
+    },
+    "59th Street–Columbus Circle": {
+        "complex_name": "59th Street–Columbus Circle",
+        "station_names": [
+            "59 St-Columbus Circle",
+            "59th Street–Columbus Circle",
+            "59 St"
+        ],
+        "lines": [
+            "1",
+            "2",
+            "A",
+            "B",
+            "C",
+            "D"
+        ],
+        "description": "IRT Broadway–Seventh Avenue Line and IND Eighth Avenue Line transfer"
+    },
+    "Lexington Avenue/59th Street": {
+        "complex_name": "Lexington Avenue/59th Street",
+        "station_names": [
+            "Lexington Ave/59 St",
+            "Lexington Avenue/59th Street",
+            "59 St",
+            "Lexington Ave-59 St",
+            "Lexington Avenue–59th Street",
+            "5 Ave/59 St",
+            "Lexington Avenue–63rd Street"
+        ],
+        "lines": [
+            "4",
+            "5",
+            "6",
+            "N",
+            "R",
+            "W",
+            "F",
+            "Q"
+        ],
+        "description": "Complex transfer between multiple lines at 59th-63rd Streets"
+    },
+    "Canal Street": {
+        "complex_name": "Canal Street",
+        "station_names": [
+            "Canal St"
+        ],
+        "lines": [
+            "1",
+            "6",
+            "J",
+            "Z",
+            "N",
+            "Q",
+            "R",
+            "W"
+        ],
+        "description": "Multiple Canal Street stations connected by passageways"
+    },
+    "Fulton Street": {
+        "complex_name": "Fulton Street",
+        "station_names": [
+            "Fulton St"
+        ],
+        "lines": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "A",
+            "C",
+            "J",
+            "Z"
+        ],
+        "description": "Major downtown transfer hub at Fulton Center"
+    },
+    "Brooklyn Bridge–City Hall/Chambers Street": {
+        "complex_name": "Brooklyn Bridge–City Hall",
+        "station_names": [
+            "Brooklyn Bridge-City Hall",
+            "Chambers St"
+        ],
+        "lines": [
+            "4",
+            "5",
+            "6",
+            "J",
+            "Z"
+        ],
+        "description": "IRT Lexington Avenue Line and BMT Nassau Street Line connection"
+    },
+    "West 4th Street–Washington Square": {
+        "complex_name": "West 4th Street–Washington Square",
+        "station_names": [
+            "W 4 St-Wash Sq"
+        ],
+        "lines": [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F",
+            "M"
+        ],
+        "description": "IND Sixth Avenue Line and IND Eighth Avenue Line transfer"
+    },
+    "Atlantic Avenue–Barclays Center": {
+        "complex_name": "Atlantic Avenue–Barclays Center",
+        "station_names": [
+            "Atlantic Ave-Barclays Ctr"
+        ],
+        "lines": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "B",
+            "D",
+            "N",
+            "Q",
+            "R",
+            "W"
+        ],
+        "description": "Major Brooklyn transfer hub"
+    },
+    "Borough Hall/Court Street": {
+        "complex_name": "Borough Hall",
+        "station_names": [
+            "Borough Hall",
+            "Court St"
+        ],
+        "lines": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "N",
+            "R",
+            "W"
+        ],
+        "description": "Brooklyn transfer between IRT and BMT lines"
+    },
+    "DeKalb Avenue": {
+        "complex_name": "DeKalb Avenue",
+        "station_names": [
+            "DeKalb Ave"
+        ],
+        "lines": [
+            "B",
+            "D",
+            "N",
+            "Q",
+            "R",
+            "W"
+        ],
+        "description": "Cross-platform interchange between BMT Fourth Avenue Line and BMT Brighton Line"
+    },
+    "Jay Street–MetroTech": {
+        "complex_name": "Jay Street–MetroTech",
+        "station_names": [
+            "Jay St-MetroTech"
+        ],
+        "lines": [
+            "A",
+            "C",
+            "F",
+            "N",
+            "R",
+            "W"
+        ],
+        "description": "Multi-line complex in Downtown Brooklyn"
+    },
+    "Hoyt–Schermerhorn Streets": {
+        "complex_name": "Hoyt–Schermerhorn Streets",
+        "station_names": [
+            "Hoyt-Schermerhorn Sts"
+        ],
+        "lines": [
+            "A",
+            "C",
+            "G"
+        ],
+        "description": "Cross-platform interchange between IND lines"
+    },
+    "Broadway Junction": {
+        "complex_name": "Broadway Junction",
+        "station_names": [
+            "Broadway Junction"
+        ],
+        "lines": [
+            "A",
+            "C",
+            "J",
+            "Z",
+            "L"
+        ],
+        "description": "Major transfer point in Brooklyn"
+    },
+    "Coney Island–Stillwell Avenue": {
+        "complex_name": "Coney Island–Stillwell Avenue",
+        "station_names": [
+            "Coney Island-Stillwell Ave"
+        ],
+        "lines": [
+            "D",
+            "F",
+            "N",
+            "Q"
+        ],
+        "description": "Terminal complex serving four lines"
+    },
+    "Franklin Avenue": {
+        "complex_name": "Franklin Avenue",
+        "station_names": [
+            "Franklin Ave",
+            "Franklin Avenue–Fulton Street",
+            "Franklin Avenue–Medgar Evers College",
+            "Botanic Garden"
+        ],
+        "lines": [
+            "2",
+            "3",
+            "4",
+            "5",
+            "A",
+            "C",
+            "S"
+        ],
+        "description": "Multiple Franklin Avenue stations and connections"
+    },
+    "Court Square": {
+        "complex_name": "Court Square",
+        "station_names": [
+            "Court Sq",
+            "Court Sq-23 St"
+        ],
+        "lines": [
+            "7",
+            "E",
+            "M",
+            "G"
+        ],
+        "description": "Queens transfer complex"
+    },
+    "Jackson Heights–Roosevelt Avenue": {
+        "complex_name": "Jackson Heights–Roosevelt Avenue",
+        "station_names": [
+            "Jackson Hts-Roosevelt Ave",
+            "74 St-Broadway"
+        ],
+        "lines": [
+            "7",
+            "E",
+            "F",
+            "M",
+            "R"
+        ],
+        "description": "Major Queens transfer hub"
+    },
+    "Queensboro Plaza": {
+        "complex_name": "Queensboro Plaza",
+        "station_names": [
+            "Queensboro Plaza"
+        ],
+        "lines": [
+            "7",
+            "N",
+            "W"
+        ],
+        "description": "Cross-platform interchange between BMT Astoria Line and IRT Flushing Line"
+    },
+    "Jamaica Center": {
+        "complex_name": "Jamaica Center",
+        "station_names": [
+            "Jamaica Center-Parsons/Archer"
+        ],
+        "lines": [
+            "E",
+            "J",
+            "Z"
+        ],
+        "description": "Two-level terminal complex"
+    },
+    "Sutphin Boulevard–Archer Avenue": {
+        "complex_name": "Sutphin Boulevard–Archer Avenue",
+        "station_names": [
+            "Sutphin Blvd-Archer Ave-JFK Airport"
+        ],
+        "lines": [
+            "E",
+            "J",
+            "Z"
+        ],
+        "description": "Two-level station with JFK AirTrain connection"
+    },
+    "149th Street–Grand Concourse": {
+        "complex_name": "149th Street–Grand Concourse",
+        "station_names": [
+            "149 St-Grand Concourse"
+        ],
+        "lines": [
+            "2",
+            "4",
+            "5"
+        ],
+        "description": "Bronx transfer between IRT Jerome Avenue Line and IRT White Plains Road Line"
+    },
+    "161st Street–Yankee Stadium": {
+        "complex_name": "161st Street–Yankee Stadium",
+        "station_names": [
+            "161 St-Yankee Stadium"
+        ],
+        "lines": [
+            "4",
+            "B",
+            "D"
+        ],
+        "description": "Transfer between IRT Jerome Avenue Line and IND Concourse Line"
+    },
+    "125th Street": {
+        "complex_name": "125th Street",
+        "station_names": [
+            "125 St"
+        ],
+        "lines": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "A",
+            "B",
+            "C",
+            "D"
+        ],
+        "description": "Major Harlem transfer point across multiple lines"
+    },
+    "168th Street": {
+        "complex_name": "168th Street",
+        "station_names": [
+            "168 St",
+            "168 St-Washington Hts"
+        ],
+        "lines": [
+            "1",
+            "A",
+            "C"
+        ],
+        "description": "Washington Heights transfer"
+    },
+    "145th Street": {
+        "complex_name": "145th Street",
+        "station_names": [
+            "145 St"
+        ],
+        "lines": [
+            "1",
+            "3",
+            "A",
+            "B",
+            "C",
+            "D"
+        ],
+        "description": "Transfer between IND Eighth Avenue Line and IND Concourse Line"
+    }
+}

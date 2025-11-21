@@ -114,6 +114,37 @@ function getMTAColor(line) {
     return mtaLineColors[line] || '#808183'; // Default to gray if line not found
 }
 
+// Load transfer stations mapping
+let transferStationsMapping = {};
+async function loadTransferStations() {
+    try {
+        const response = await fetch('../../data/transfer_stations.json');
+        transferStationsMapping = await response.json();
+        console.log('✅ Loaded transfer stations mapping');
+    } catch (error) {
+        console.error('❌ Failed to load transfer stations mapping:', error);
+        transferStationsMapping = {};
+    }
+}
+
+// Find which transfer complex a station belongs to
+function findTransferComplex(stationName) {
+    for (const [complexId, complex] of Object.entries(transferStationsMapping)) {
+        if (complex.station_names.some(name =>
+            stationName.toLowerCase().includes(name.toLowerCase()) ||
+            name.toLowerCase().includes(stationName.toLowerCase()) ||
+            stationName === name
+        )) {
+            return {
+                id: complexId,
+                name: complex.complex_name,
+                lines: complex.lines
+            };
+        }
+    }
+    return null;
+}
+
 // Consolidate stops that serve multiple lines
 function consolidateStopsByLines(stopData, rides) {
     const consolidatedStops = {};
@@ -135,17 +166,23 @@ function consolidateStopsByLines(stopData, rides) {
         });
     });
 
-    // Process the stop data and consolidate
+    // Process the stop data and consolidate by transfer complexes
     stopData.forEach(item => {
         const stopName = item.stop_name;
         const count = item.visit_count || item.transfer_count;
 
+        // Check if this station is part of a transfer complex
+        const transferComplex = findTransferComplex(stopName);
+        const consolidationKey = transferComplex ? transferComplex.name : stopName;
+
         // Find the most frequently used line at this stop
         let primaryLine = null;
         let maxUsage = 0;
+        let allLinesAtStop = [];
 
         if (stopLineUsage[stopName]) {
             for (const [line, usage] of Object.entries(stopLineUsage[stopName])) {
+                allLinesAtStop.push(line);
                 if (usage > maxUsage) {
                     maxUsage = usage;
                     primaryLine = line;
@@ -153,20 +190,50 @@ function consolidateStopsByLines(stopData, rides) {
             }
         }
 
+        // If it's a transfer complex, use the most prominent line from the complex
+        if (transferComplex) {
+            // Find the most used line from the transfer complex's available lines
+            let bestLine = primaryLine;
+            let bestLineUsage = maxUsage;
+
+            for (const complexLine of transferComplex.lines) {
+                if (stopLineUsage[stopName] && stopLineUsage[stopName][complexLine] > bestLineUsage) {
+                    bestLine = complexLine;
+                    bestLineUsage = stopLineUsage[stopName][complexLine];
+                }
+            }
+            primaryLine = bestLine || transferComplex.lines[0]; // Fallback to first line in complex
+        }
+
         // Use the primary line or default
         const lineForColor = primaryLine || 'S'; // Default to shuttle gray
 
-        if (!consolidatedStops[stopName]) {
-            consolidatedStops[stopName] = {
-                stop_name: stopName,
+        if (!consolidatedStops[consolidationKey]) {
+            consolidatedStops[consolidationKey] = {
+                stop_name: consolidationKey,
                 count: count,
                 primary_line: lineForColor,
-                lines: stopLineUsage[stopName] ? Object.keys(stopLineUsage[stopName]) : [],
-                color: getMTAColor(lineForColor)
+                lines: transferComplex ? transferComplex.lines : allLinesAtStop,
+                color: getMTAColor(lineForColor),
+                is_transfer_complex: !!transferComplex,
+                original_stations: [stopName]
             };
         } else {
-            // This shouldn't happen in our current data structure, but just in case
-            consolidatedStops[stopName].count += count;
+            // Consolidate counts and track original stations
+            consolidatedStops[consolidationKey].count += count;
+            if (!consolidatedStops[consolidationKey].original_stations.includes(stopName)) {
+                consolidatedStops[consolidationKey].original_stations.push(stopName);
+            }
+
+            // Update primary line if this station has higher usage
+            if (stopLineUsage[stopName]) {
+                for (const [line, usage] of Object.entries(stopLineUsage[stopName])) {
+                    if (usage > maxUsage) {
+                        consolidatedStops[consolidationKey].primary_line = line;
+                        consolidatedStops[consolidationKey].color = getMTAColor(line);
+                    }
+                }
+            }
         }
     });
 
@@ -185,6 +252,7 @@ function processLineData(lineData) {
 document.addEventListener('DOMContentLoaded', async () => {
     setupFilterButtons();
     setupCustomDateRange();
+    await loadTransferStations(); // Load transfer stations mapping first
     await loadAllData();
 });
 
@@ -597,8 +665,17 @@ function updateVisitedStopsChart(data, rides) {
                         title: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
                             const item = top10Data[index];
-                            const lines = item.lines.join('/');
-                            return `${item.stop_name}${lines ? ` (${lines})` : ''}`;
+                            return item.stop_name;
+                        },
+                        afterTitle: function (tooltipItems) {
+                            const index = tooltipItems[0].dataIndex;
+                            const item = top10Data[index];
+                            if (item.lines && item.lines.length > 0) {
+                                const lineDisplay = item.lines.join('/');
+                                const complexInfo = item.is_transfer_complex ? ' (Transfer Complex)' : '';
+                                return `Lines: ${lineDisplay}${complexInfo}`;
+                            }
+                            return '';
                         },
                         label: function (context) {
                             return `Visits: ${context.parsed.y}`;
@@ -694,8 +771,17 @@ function updateTransferStopsChart(data, rides) {
                         title: function (tooltipItems) {
                             const index = tooltipItems[0].dataIndex;
                             const item = top10Data[index];
-                            const lines = item.lines.join('/');
-                            return `${item.stop_name}${lines ? ` (${lines})` : ''}`;
+                            return item.stop_name;
+                        },
+                        afterTitle: function (tooltipItems) {
+                            const index = tooltipItems[0].dataIndex;
+                            const item = top10Data[index];
+                            if (item.lines && item.lines.length > 0) {
+                                const lineDisplay = item.lines.join('/');
+                                const complexInfo = item.is_transfer_complex ? ' (Transfer Complex)' : '';
+                                return `Lines: ${lineDisplay}${complexInfo}`;
+                            }
+                            return '';
                         },
                         label: function (context) {
                             return `Transfers: ${context.parsed.y}`;
