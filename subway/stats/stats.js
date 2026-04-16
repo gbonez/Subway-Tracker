@@ -1206,19 +1206,22 @@ function updateRidesOverTimeChart(rides) {
     let groupedData = {};
     let chartTitle = 'Rides Over Time';
     let labelFormat = '';
+    // For all/custom: one entry per year; each value is an array of 12 monthly counts
+    let perYearData = {};
 
     // Group rides based on current filter
     if (currentFilter === 'all' || currentFilter === 'custom') {
-        // Show monthly data with year
-        chartTitle = 'Monthly Rides';
+        chartTitle = 'Cumulative Monthly Rides';
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
         rides.forEach(ride => {
             const date = new Date(ride.date || ride.created_at);
-            const monthKey = date.toLocaleDateString('en-US', {
-                month: 'short',
-                year: '2-digit',
-                timeZone: 'America/New_York'
-            });
-            groupedData[monthKey] = (groupedData[monthKey] || 0) + 1;
+            const year = date.getFullYear();
+            const monthIdx = date.getMonth();
+            if (!perYearData[year]) {
+                perYearData[year] = new Array(12).fill(0);
+            }
+            perYearData[year][monthIdx] += 1;
         });
     } else if (currentFilter === 'month') {
         // Show weekly data (first date of week starting Monday)
@@ -1254,7 +1257,6 @@ function updateRidesOverTimeChart(rides) {
             }
         });
     } else if (currentFilter === 'year') {
-        // Show monthly data without year
         chartTitle = 'Monthly Rides This Year';
         const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         rides.forEach(ride => {
@@ -1277,37 +1279,85 @@ function updateRidesOverTimeChart(rides) {
         titleElement.textContent = chartTitle;
     }
 
-    // Sort data appropriately
+    // ── All / Custom: stacked bar chart, one dataset per year ───────────────
+    if (currentFilter === 'all' || currentFilter === 'custom') {
+        const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+        // One color per year, cycling through a palette
+        const yearPalette = [
+            '#4a9eff', '#4CAF50', '#FF9800', '#9C27B0',
+            '#F44336', '#00BCD4', '#FFEB3B', '#FF5722',
+            '#607D8B', '#795548'
+        ];
+
+        const sortedYears = Object.keys(perYearData).map(Number).sort((a, b) => a - b);
+
+        const datasets = sortedYears.map((year, i) => {
+            const col = yearPalette[i % yearPalette.length];
+            return {
+                label: String(year),
+                data: perYearData[year],
+                backgroundColor: col,
+                borderColor: col,
+                borderWidth: 1
+            };
+        });
+
+        charts.ridesOverTime = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: monthOrder, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { color: '#e0e0e0', usePointStyle: true }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        ticks: { color: '#e0e0e0' },
+                        grid: { color: '#333' }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: {
+                            color: '#e0e0e0',
+                            stepSize: 1,
+                            callback: v => Number.isInteger(v) ? v : ''
+                        },
+                        grid: { color: '#333' }
+                    }
+                }
+            }
+        });
+
+        console.log('✅ Rides over time chart (stacked by year) created successfully');
+        return;
+    }
+
+    // ── All other filters: single-dataset bar chart ──────────────────────────
     let labels, values;
     if (currentFilter === 'week') {
-        // Sort by day of week
         const dayOrder = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         labels = dayOrder;
         values = dayOrder.map(day => groupedData[day] || 0);
     } else if (currentFilter === 'year') {
-        // Sort by month order
         const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         labels = monthOrder;
         values = monthOrder.map(month => groupedData[month] || 0);
     } else {
-        // Sort chronologically for other filters
+        // Sort chronologically for weekly (month filter) view — MM/DD format
         labels = Object.keys(groupedData).sort((a, b) => {
-            if (currentFilter === 'month') {
-                // Parse MM/DD format for weekly view
-                const [monthA, dayA] = a.split('/').map(Number);
-                const [monthB, dayB] = b.split('/').map(Number);
-                const dateA = new Date(new Date().getFullYear(), monthA - 1, dayA);
-                const dateB = new Date(new Date().getFullYear(), monthB - 1, dayB);
-                return dateA - dateB;
-            } else {
-                // Parse "MMM YY" format for all-time view
-                const parseDate = (str) => {
-                    const [month, year] = str.split(' ');
-                    const monthIndex = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(month);
-                    return new Date(2000 + parseInt(year), monthIndex);
-                };
-                return parseDate(a) - parseDate(b);
-            }
+            const [monthA, dayA] = a.split('/').map(Number);
+            const [monthB, dayB] = b.split('/').map(Number);
+            const dateA = new Date(new Date().getFullYear(), monthA - 1, dayA);
+            const dateB = new Date(new Date().getFullYear(), monthB - 1, dayB);
+            return dateA - dateB;
         });
         values = labels.map(label => groupedData[label]);
     }
@@ -1328,9 +1378,7 @@ function updateRidesOverTimeChart(rides) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: {
-                    display: false
-                }
+                legend: { display: false }
             },
             scales: {
                 y: {
@@ -1342,18 +1390,11 @@ function updateRidesOverTimeChart(rides) {
                             return Number.isInteger(value) ? value : '';
                         }
                     },
-                    grid: {
-                        color: '#333'
-                    }
+                    grid: { color: '#333' }
                 },
                 x: {
-                    ticks: {
-                        color: '#e0e0e0',
-                        maxRotation: 45
-                    },
-                    grid: {
-                        color: '#333'
-                    }
+                    ticks: { color: '#e0e0e0', maxRotation: 45 },
+                    grid: { color: '#333' }
                 }
             }
         }

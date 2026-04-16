@@ -211,9 +211,13 @@
     </select><br>
 
     <label for="boardStop">Boarding Stop:</label>
-    <select id="boardStop">
-      <option value="">Select boarding stop</option>
-    </select><br>
+    <div style="display:inline-flex;align-items:center;gap:0.5em;">
+      <select id="boardStop">
+        <option value="">Select boarding stop</option>
+      </select>
+      <button type="button" onclick="swapStops()" title="Swap stops"
+        style="background:none;border:none;cursor:pointer;font-size:1.25rem;padding:0.25em;color:var(--text-color);line-height:1;">🔄</button>
+    </div><br>
 
     <label for="departStop">Departing Stop:</label>
     <select id="departStop">
@@ -274,6 +278,12 @@
       let currentPage = 1;
       let entriesPerPage = 25;
 
+      function swapStops() {
+        const boardVal = boardStopSelect.value;
+        const departVal = departStopSelect.value;
+        boardStopSelect.value = departVal;
+        departStopSelect.value = boardVal;
+      }
 
       async function validatePassword(operation = "modify data") {
         if (localStorage.getItem('gbonez_trusted') === 'true') {
