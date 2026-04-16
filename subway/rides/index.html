@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NYC Subway Ride Tracker</title>
+  <link rel="icon" type="image/x-icon" href="../../forrest.ico">
+  <style>
+    :root {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --border-color: #333;
+      --highlight-color: #1e1e1e;
+      --input-bg: #1e1e1e;
+      --input-border: #444;
+      --button-bg: #333;
+      --button-text: #fff;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: sans-serif;
+      margin: 1em;
+    }
+
+    .container {
+      max-width: 100%;
+      padding: 1em;
+      box-sizing: border-box;
+    }
+
+    select,
+    button,
+    input[type="date"] {
+      background-color: var(--input-bg);
+      color: var(--text-color);
+      border: 1px solid var(--input-border);
+      margin: 0.5em 0;
+      padding: 0.75em;
+      font-size: 1rem;
+      width: 100%;
+      max-width: 300px;
+      box-sizing: border-box;
+    }
+
+    button {
+      background-color: var(--button-bg);
+      color: var(--button-text);
+      border: 1px solid var(--input-border);
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #444;
+    }
+
+    #message {
+      margin-top: 1em;
+      color: #90ee90;
+    }
+
+    table {
+      display: block;
+      overflow-x: auto;
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--highlight-color);
+    }
+
+    @media (max-width: 600px) {
+
+      th,
+      td {
+        font-size: 0.9em;
+        padding: 6px 8px;
+      }
+
+      select,
+      button,
+      input[type="date"] {
+        width: 100%;
+        max-width: 100%;
+      }
+
+      label {
+        display: block;
+        margin-top: 1em;
+      }
+
+      button {
+        min-height: 44px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--border-color);
+      }
+    }
+
+    .pagination-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5em;
+      justify-content: center;
+    }
+
+    @media (max-width: 600px) {
+      .pagination-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .pagination-wrapper button {
+        width: 100%;
+      }
+
+      .pagination-wrapper span {
+        text-align: center;
+        width: 100%;
+        display: block;
+      }
+    }
+
+    .nav-links {
+      margin-bottom: 2em;
+      display: flex;
+      gap: 1em;
+      flex-wrap: wrap;
+    }
+
+    .nav-links a {
+      color: var(--text-color);
+      text-decoration: none;
+      padding: 0.5em 1em;
+      border: 1px solid var(--input-border);
+      background-color: var(--input-bg);
+      border-radius: 4px;
+    }
+
+    .nav-links a:hover {
+      background-color: var(--button-bg);
+    }
+
+    .nav-links a.active {
+      background-color: var(--button-bg);
+    }
+
+    @media (max-width: 600px) {
+      .nav-links {
+        flex-direction: column;
+      }
+
+      .nav-links a {
+        text-align: center;
+      }
+    }
+  </style>
+  <script>
+    // Load subway stations data
+    let stopsByLine = {};
+
+    async function loadSubwayDataIfNeeded() {
+      if (Object.keys(stopsByLine).length > 0) return; // Already loaded
+
+      try {
+        const response = await fetch('../../data/stops.json');
+        stopsByLine = await response.json();
+        console.log('✅ Loaded subway data');
+      } catch (error) {
+        console.error('❌ Failed to load subway data:', error);
+      }
+    }
+
+    async function loadSubwayData() {
+      await loadSubwayDataIfNeeded();
+      initializeApp();
+    }
+
+    // Load data when page loads
+    document.addEventListener('DOMContentLoaded', loadSubwayData);
+  </script>
+</head>
+
+<body>
+  <div class="container">
+    <nav class="nav-links">
+      <a href="/">← gbonez.org</a>
+      <a href="../">Subway Home</a>
+      <a href="." class="active">Record Ride</a>
+      <a href="../import-ride/">Import Route</a>
+      <a href="../stats/">Ride Statistics</a>
+    </nav>
+
+    <h1>Record a Subway Ride 🚇</h1> <label for="line">Line:</label>
+    <select id="line">
+      <option value="">Select a line</option>
+    </select><br>
+
+    <label for="boardStop">Boarding Stop:</label>
+    <select id="boardStop">
+      <option value="">Select boarding stop</option>
+    </select><br>
+
+    <label for="departStop">Departing Stop:</label>
+    <select id="departStop">
+      <option value="">Select departing stop</option>
+    </select><br>
+
+    <label for="rideDate">Date:</label>
+    <input type="date" id="rideDate" /><br>
+
+    <label for="transferred">
+      <input type="checkbox" id="transferred" />
+      Did you transfer to another line at your departure stop?
+    </label><br>
+    <button id="submitButton" onclick="submitRide()">Submit Ride</button>
+    <div id="message"></div>
+    <hr />
+    <div id="loading" style="display: none; font-weight: bold; margin-top: 1em;">Loading rides...</div>
+    <div>
+      <label for="entriesPerPage">Show entries:</label>
+      <select id="entriesPerPage" onchange="changeEntriesPerPage()">
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="all">All</option>
+      </select>
+      <button onclick="fetchRides()">Refresh Table</button>
+      <button onclick="clearDatabase()">Clear Table</button>
+      <button onclick="exportCSV()">Export Table</button>
+    </div>
+    <table id="ridesTable" border="1" style="margin-top: 1em;">
+      <thead>
+        <tr>
+          <th><button onclick="sortRides('ride_number')">Ride #</button></th>
+          <th><button onclick="sortRides('line')">Line</button></th>
+          <th><button onclick="sortRides('board_stop')">Boarding Stop</button></th>
+          <th><button onclick="sortRides('depart_stop')">Departing Stop</button></th>
+          <th><button onclick="sortRides('date')">Date</button></th>
+          <th><button onclick="sortRides('transferred')">Transferred</button></th>
+          <th>Delete?</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="paginationControls" style="margin-top: 1em;"></div>
+
+    <script>
+      const backendUrl = `https://subway-tracker-production.up.railway.app`;
+
+      const lineSelect = document.getElementById("line");
+      const boardStopSelect = document.getElementById("boardStop");
+      const departStopSelect = document.getElementById("departStop");
+      const messageDiv = document.getElementById("message");
+      const ridesTableBody = document.querySelector("#ridesTable tbody");
+
+      let allRides = [];
+      let currentSortColumn = "ride_number";
+      let currentSortDirection = "desc";
+      let currentPage = 1;
+      let entriesPerPage = 25;
+
+      // Password validation function
+      async function validatePassword(operation = "modify data") {
+        const password = prompt(`Please enter the admin password to ${operation}:`);
+
+        if (!password) {
+          return false; // User cancelled
+        }
+
+        try {
+          const response = await fetch(`${backendUrl}/validate-password`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ password: password })
+          });
+
+          if (response.ok) {
+            return true;
+          } else {
+            const errorData = await response.json();
+            alert(`❌ ${errorData.detail || 'Invalid password'}`);
+            return false;
+          }
+        } catch (error) {
+          console.error("Password validation error:", error);
+          alert(`❌ Error validating password: ${error.message}`);
+          return false;
+        }
+      }
+
+      window.addEventListener("DOMContentLoaded", async () => {
+        // First load subway station data
+        await loadSubwayDataIfNeeded();
+
+        // Test backend connectivity first
+        console.log("🔗 Testing backend connectivity...");
+        try {
+          const healthRes = await fetch(`${backendUrl}/`);
+          const healthData = await healthRes.json();
+          console.log("✅ Backend health check:", healthData);
+        } catch (err) {
+          console.error("❌ Backend connectivity failed:", err);
+          messageDiv.textContent = `Cannot connect to backend: ${err.message}`;
+          messageDiv.style.color = "#ff6b6b";
+        }
+
+        // Load subway lines
+        const lines = Object.keys(stopsByLine).sort();
+        lines.forEach(line => {
+          const opt = document.createElement("option");
+          opt.value = line;
+          opt.textContent = line;
+          lineSelect.appendChild(opt);
+        });
+
+        // Set date input to current date in EST
+        const rideDateInput = document.getElementById('rideDate');
+        const today = new Date();
+        // Convert to EST by adjusting for timezone offset
+        const estOffset = -5 * 60; // EST is UTC-5 (in minutes)
+        const estDate = new Date(today.getTime() + (estOffset - today.getTimezoneOffset()) * 60000);
+        const currentDate = estDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+        rideDateInput.value = currentDate;
+
+        fetchRides();
+      });
+
+      lineSelect.addEventListener("change", () => {
+        const line = lineSelect.value;
+        const stops = stopsByLine[line] || [];
+
+        [boardStopSelect, departStopSelect].forEach(select => {
+          select.innerHTML = "<option value=''>Select stop</option>";
+          stops.forEach(stop => {
+            const opt = document.createElement("option");
+            opt.value = stop;
+            opt.textContent = stop;
+            select.appendChild(opt);
+          });
+        });
+      });
+
+      async function submitRide() {
+        // First validate password
+        if (!(await validatePassword("add a new ride"))) {
+          return;
+        }
+
+        const submitBtn = document.getElementById("submitButton");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Submitting...";
+
+        const line = lineSelect.value;
+        const boardStop = boardStopSelect.value;
+        const departStop = departStopSelect.value;
+        const rideDateInput = document.getElementById("rideDate").value;
+        const transferred = document.getElementById("transferred").checked;
+
+        if (!line || !boardStop || !departStop || !rideDateInput) {
+          alert("Please fill in all fields.");
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit Ride";
+          return;
+        }
+
+        const data = {
+          line,
+          board_stop: boardStop,
+          depart_stop: departStop,
+          date: rideDateInput,
+          transferred
+        };
+
+        try {
+          const res = await fetch(`${backendUrl}/rides/`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+          });
+
+          const result = await res.json();
+
+          if (res.ok) {
+            messageDiv.textContent = "New ride successfully recorded! ✅";
+            await fetchRides();
+          } else {
+            messageDiv.textContent = `Error ${res.status}: ${result.detail || 'Unknown error'}`;
+          }
+        } catch (err) {
+          console.error(err);
+          messageDiv.textContent = `Error submitting ride: ${err.message}`;
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit Ride";
+        }
+      }
+
+      async function fetchRides() {
+        const loadingIndicator = document.getElementById("loading");
+        loadingIndicator.style.display = "block";
+
+        console.log("🔍 Fetching all rides from:", `${backendUrl}/rides/?per_page=10000`);
+
+        try {
+          const res = await fetch(`${backendUrl}/rides/?per_page=10000`);
+          console.log("📡 Response status:", res.status);
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            console.error("❌ Response error:", errorText);
+            throw new Error(`HTTP ${res.status}: ${errorText}`);
+          }
+
+          const data = await res.json();
+          console.log("📊 Received data:", data);
+
+          // Extract rides array from the response object
+          const ridesArray = data.rides || data;
+          console.log("📊 Rides array length:", ridesArray.length);
+
+          allRides = ridesArray;
+          sortRides();
+          currentPage = 1;
+
+          if (ridesArray.length === 0) {
+            messageDiv.textContent = "No rides found in database. Add some rides first!";
+            messageDiv.style.color = "#ffd700";
+          } else {
+            messageDiv.textContent = `Loaded ${ridesArray.length} rides from database ✅`;
+            messageDiv.style.color = "#90ee90";
+          }
+        } catch (err) {
+          console.error("❌ Fetch error:", err);
+          allRides = [];
+          messageDiv.textContent = `Error loading rides: ${err.message}`;
+          messageDiv.style.color = "#ff6b6b";
+        } finally {
+          loadingIndicator.style.display = "none";
+          renderTable();
+        }
+      }
+
+      function sortRides(column) {
+        if (column) {
+          if (column === currentSortColumn) {
+            currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+          } else {
+            currentSortColumn = column;
+            currentSortDirection = "asc";
+          }
+        }
+
+        allRides.sort((a, b) => {
+          let valA = a[currentSortColumn];
+          let valB = b[currentSortColumn];
+
+          if (currentSortColumn === "date") {
+            valA = new Date(valA);
+            valB = new Date(valB);
+          } else if (currentSortColumn === "ride_number") {
+            valA = parseInt(valA, 10);
+            valB = parseInt(valB, 10);
+          } else {
+            valA = valA?.toString().toLowerCase();
+            valB = valB?.toString().toLowerCase();
+          }
+
+          if (valA < valB) return currentSortDirection === "asc" ? -1 : 1;
+          if (valA > valB) return currentSortDirection === "asc" ? 1 : -1;
+          return 0;
+        });
+
+        renderTable();
+      }
+
+      function changeEntriesPerPage() {
+        const value = document.getElementById("entriesPerPage").value;
+        entriesPerPage = value === "all" ? allRides.length : parseInt(value);
+        currentPage = 1;
+        renderTable();
+      }
+
+      function renderTable() {
+        const tableBody = document.querySelector("#ridesTable tbody");
+        tableBody.innerHTML = "";
+
+        // Add click handlers and arrows to header
+        const headerRow = document.querySelector("#ridesTable thead tr");
+        const headers = headerRow.querySelectorAll("th");
+        const sortableColumns = ["ride_number", "line", "board_stop", "depart_stop", "date", "transferred"];
+
+        headers.forEach((th, i) => {
+          const key = sortableColumns[i];
+          if (!key) return; // Skip non-sortable (like delete)
+
+          th.style.cursor = "pointer";
+          th.onclick = () => {
+            if (currentSortColumn === key) {
+              currentSortDirection = currentSortDirection === "asc" ? "desc" : "asc";
+            } else {
+              currentSortColumn = key;
+              currentSortDirection = "asc";
+            }
+            sortRides();
+            renderTable();
+          };
+
+          // Add arrow indicator
+          let arrow = "";
+          if (currentSortColumn === key) {
+            arrow = currentSortDirection === "asc" ? " ▲" : " ▼";
+          }
+          th.textContent = th.textContent.split(" ")[0] + arrow;
+        });
+
+        const start = (currentPage - 1) * entriesPerPage;
+        const end = start + entriesPerPage;
+        const paginatedRides = allRides.slice(start, end);
+
+        paginatedRides.forEach(ride => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+          <td>${ride.ride_number}</td>
+          <td>${ride.line}</td>
+          <td>${ride.board_stop}</td>
+          <td>${ride.depart_stop}</td>
+          <td>${ride.date}</td>
+          <td>${ride.transferred ? "Yes" : "No"}</td>
+          <td>
+            <button 
+              data-id="${ride.id}"
+              data-ride-number="${ride.ride_number}"
+              onclick="deleteRide(this)" 
+              title="Delete ride" 
+              style="background:none;border:none;cursor:pointer;"
+            >🗑️</button>
+          </td>`;
+
+          tableBody.appendChild(row);
+        });
+
+        renderPaginationControls();
+      }
+
+      function renderPaginationControls() {
+        const totalPages = Math.ceil(allRides.length / entriesPerPage);
+        const container = document.getElementById("paginationControls");
+        container.innerHTML = "";
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "pagination-wrapper";
+
+        container.innerHTML = "";
+
+        if (totalPages <= 1) return;
+
+        const makeButton = (label, onClick, disabled = false) => {
+          const btn = document.createElement("button");
+          btn.textContent = label;
+          btn.style.margin = "0 4px";
+          btn.disabled = disabled;
+          btn.onclick = onClick;
+          return btn;
+        };
+
+        wrapper.appendChild(makeButton("⏮ First", () => {
+          currentPage = 1;
+          renderTable();
+        }, currentPage === 1));
+
+        wrapper.appendChild(makeButton("◀ Prev", () => {
+          currentPage--;
+          renderTable();
+        }, currentPage === 1));
+
+        const pageDisplay = document.createElement("span");
+        pageDisplay.textContent = ` Page ${currentPage} of ${totalPages} `;
+        pageDisplay.style.margin = "0 8px";
+        wrapper.appendChild(pageDisplay);
+
+        wrapper.appendChild(makeButton("Next ▶", () => {
+          currentPage++;
+          renderTable();
+        }, currentPage === totalPages));
+
+        wrapper.appendChild(makeButton("Last ⏭", () => {
+          currentPage = totalPages;
+          renderTable();
+        }, currentPage === totalPages));
+
+        container.appendChild(wrapper);
+      }
+
+      async function deleteRide(buttonElement) {
+        const rideId = buttonElement.getAttribute("data-id");
+        const rideNumber = buttonElement.getAttribute("data-ride-number");
+
+        if (!rideId) {
+          alert("Invalid ride ID");
+          return;
+        }
+
+        const confirmed = confirm(`Delete ride #${rideNumber}?`);
+        if (!confirmed) return;
+
+        // Validate password before deletion
+        if (!(await validatePassword("delete this ride"))) {
+          return;
+        }
+
+        try {
+          const res = await fetch(`${backendUrl}/rides/${rideId}`, {
+            method: "DELETE"
+          });
+
+          if (res.ok) {
+            await fetchRides();
+          } else {
+            alert("Failed to delete ride.");
+          }
+        } catch (err) {
+          console.error("Error deleting ride:", err);
+          alert("An error occurred while deleting.");
+        }
+      }
+
+      async function clearDatabase() {
+        if (confirm("Are you sure you want to delete all rides?")) {
+          // Validate password before clearing database
+          if (!(await validatePassword("clear all rides from the database"))) {
+            return;
+          }
+
+          try {
+            const res = await fetch(`${backendUrl}/rides/`, { method: "DELETE" });
+            if (res.ok) {
+              await fetchRides();
+              alert("Cleared all rides from table.");
+            } else {
+              alert("Failed to clear rides.");
+            }
+          } catch (err) {
+            console.error("Error clearing DB:", err);
+            alert("Error clearing rides.");
+          }
+        }
+      }
+
+      function exportCSV() {
+        window.location.href = "https://subway-tracker-production.up.railway.app/rides/export";
+      }
+    </script>
+  </div>
+</body>
+
+</html>

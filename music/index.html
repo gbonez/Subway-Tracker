@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music — gbonez.org</title>
+  <link rel="icon" type="image/x-icon" href="../forrest.ico">
+
+  <style>
+    :root {
+      --bg-color: #121212;
+      --text-color: #e0e0e0;
+      --accent-color: #4a9eff;
+      --border-color: #333;
+      --highlight-color: #1e1e1e;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+    }
+
+    .back-home {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4em;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.95rem;
+      margin-bottom: 2.5rem;
+      transition: color 0.2s;
+    }
+
+    .back-home:hover { color: var(--text-color); }
+
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      max-width: 560px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .icon { font-size: 4rem; margin-bottom: 1rem; }
+
+    h1 {
+      font-size: 2.75rem;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, var(--accent-color), #6c5ce7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      color: #888;
+      line-height: 1.6;
+    }
+
+    .placeholder {
+      margin-top: 2.5rem;
+      padding: 2rem;
+      background-color: var(--highlight-color);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      color: #666;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+
+<body>
+
+  <a href="/" class="back-home">← gbonez.org</a>
+
+  <div class="main">
+    <div class="icon">🎵</div>
+    <h1>Music</h1>
+    <p class="subtitle">Something about music is coming here.</p>
+
+    <div class="placeholder">
+      This section is under construction.<br>
+      Check back later for updates.
+    </div>
+  </div>
+
+</body>
+
+</html>
