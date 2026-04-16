@@ -16,13 +16,6 @@ function getESTDate() {
     return estDate;
 }
 
-function formatDateForApi(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
 // Format date for display
 function formatDateForDisplay(date) {
     return date.toLocaleDateString('en-US', {
@@ -472,9 +465,11 @@ function getDateFilter() {
 
     switch (currentFilter) {
         case 'day':
+            start = new Date(now);
+            start.setHours(0, 0, 0, 0);
             return {
-                start: formatDateForApi(now),
-                end: formatDateForApi(now)
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
             };
         case 'week':
             start = new Date(now);
@@ -484,22 +479,22 @@ function getDateFilter() {
             start.setDate(start.getDate() - dayOfWeek);
             start.setHours(0, 0, 0, 0);
             return {
-                start: formatDateForApi(start),
-                end: formatDateForApi(now)
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
             };
         case 'month':
-            start = new Date(now);
-            start.setDate(1);
+            // First day of the current calendar month
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
             return {
-                start: formatDateForApi(start),
-                end: formatDateForApi(now)
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
             };
         case 'year':
-            start = new Date(now);
-            start.setMonth(0, 1);
+            // First day of the current calendar year
+            start = new Date(now.getFullYear(), 0, 1);
             return {
-                start: formatDateForApi(start),
-                end: formatDateForApi(now)
+                start: start.toISOString().split('T')[0],
+                end: now.toISOString().split('T')[0]
             };
         case 'all':
         default:
