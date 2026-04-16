@@ -66,6 +66,9 @@
     h1 {
       font-size: 2.75rem;
       margin-bottom: 0.75rem;
+    }
+
+    .gradient-text {
       background: linear-gradient(135deg, var(--accent-color), #6c5ce7);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -136,11 +139,11 @@
 
 <body>
 
-  <a href="/" class="back-home">Return to Home</a>
+  <a href="/" class="back-home">← Return to Home</a>
 
   <div class="main">
 
-    <h1>Subway Tracker 🚇</h1>
+    <h1><span class="gradient-text">Subway Tracker</span> 🚇</h1>
     <p class="subtitle">
       Your personal NYC transit log.
     </p>
@@ -155,11 +158,11 @@
         </div>
       </a>
 
-      <a href="import-ride/" class="section-card">
-        <div class="section-icon">📋</div>
+      <a href="favorites/" class="section-card">
+        <div class="section-icon">⭐</div>
         <div>
-          <div class="section-title">Import Route</div>
-          <p class="section-description">Automatically import a ride from a Google Maps transit link.</p>
+          <div class="section-title">Favorites</div>
+          <p class="section-description">View and manage your saved favorite routes.</p>
         </div>
       </a>
 

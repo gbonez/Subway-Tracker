@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Favorites — Subway Tracker</title>
+    <link rel="icon" type="image/x-icon" href="../../forrest.ico">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --border-color: #333;
+            --highlight-color: #1e1e1e;
+            --input-bg: #1e1e1e;
+            --input-border: #444;
+            --button-bg: #333;
+            --button-text: #fff;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: sans-serif;
+            margin: 1em;
+        }
+
+        .container {
+            max-width: 100%;
+            padding: 1em;
+            box-sizing: border-box;
+        }
+
+        .nav-links {
+            margin-bottom: 2em;
+            display: flex;
+            gap: 1em;
+            flex-wrap: wrap;
+        }
+
+        .nav-links a {
+            color: var(--text-color);
+            text-decoration: none;
+            padding: 0.5em 1em;
+            border: 1px solid var(--input-border);
+            background-color: var(--input-bg);
+            border-radius: 4px;
+        }
+
+        .nav-links a:hover {
+            background-color: var(--button-bg);
+        }
+
+        .nav-links a.active {
+            background-color: var(--button-bg);
+        }
+
+        @media (max-width: 600px) {
+            .nav-links {
+                flex-direction: column;
+            }
+
+            .nav-links a {
+                text-align: center;
+            }
+        }
+
+        .placeholder {
+            margin-top: 3em;
+            text-align: center;
+            color: #666;
+        }
+
+        .placeholder .icon {
+            font-size: 3rem;
+            margin-bottom: 0.75em;
+        }
+
+        .placeholder p {
+            font-size: 1rem;
+            line-height: 1.7;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" style="color:#888;text-decoration:none;font-size:0.9rem;display:inline-block;margin-bottom:1.5em;">←
+            Return to Home</a>
+        <nav class="nav-links">
+            <a href="../">← Subway Home</a>
+            <a href="../rides/">Record Ride</a>
+            <a href="." class="active">Favorites</a>
+            <a href="../stats/">Ride Statistics</a>
+        </nav>
+
+        <h1>Favorites ⭐</h1>
+
+        <div class="placeholder">
+            <div class="icon">⭐</div>
+            <p>No favorites yet.<br>This section is coming soon.</p>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -196,13 +196,12 @@
 
 <body>
   <div class="container">
-    <a href="/"
-      style="color:#888;text-decoration:none;font-size:0.9rem;display:inline-block;margin-bottom:1.5em;">Return to
-      Home</a>
+    <a href="/" style="color:#888;text-decoration:none;font-size:0.9rem;display:inline-block;margin-bottom:1.5em;">←
+      Return to Home</a>
     <nav class="nav-links">
       <a href="../">Subway Home</a>
       <a href="." class="active">Record Ride</a>
-      <a href="../import-ride/">Import Route</a>
+      <a href="../favorites/">Favorites</a>
       <a href="../stats/">Ride Statistics</a>
     </nav>
 
@@ -275,8 +274,12 @@
       let currentPage = 1;
       let entriesPerPage = 25;
 
-      // Password validation function
+
       async function validatePassword(operation = "modify data") {
+        if (localStorage.getItem('gbonez_trusted') === 'true') {
+          return true;
+        }
+
         const password = prompt(`Please enter the admin password to ${operation}:`);
 
         if (!password) {
@@ -293,6 +296,7 @@
           });
 
           if (response.ok) {
+            localStorage.setItem('gbonez_trusted', 'true');
             return true;
           } else {
             const errorData = await response.json();
