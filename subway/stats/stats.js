@@ -16,6 +16,13 @@ function getESTDate() {
     return estDate;
 }
 
+function formatDateForApi(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // Format date for display
 function formatDateForDisplay(date) {
     return date.toLocaleDateString('en-US', {
@@ -465,11 +472,9 @@ function getDateFilter() {
 
     switch (currentFilter) {
         case 'day':
-            start = new Date(now);
-            start.setHours(0, 0, 0, 0);
             return {
-                start: start.toISOString().split('T')[0],
-                end: now.toISOString().split('T')[0]
+                start: formatDateForApi(now),
+                end: formatDateForApi(now)
             };
         case 'week':
             start = new Date(now);
@@ -479,22 +484,22 @@ function getDateFilter() {
             start.setDate(start.getDate() - dayOfWeek);
             start.setHours(0, 0, 0, 0);
             return {
-                start: start.toISOString().split('T')[0],
-                end: now.toISOString().split('T')[0]
+                start: formatDateForApi(start),
+                end: formatDateForApi(now)
             };
         case 'month':
             start = new Date(now);
-            start.setMonth(now.getMonth() - 1);
+            start.setDate(1);
             return {
-                start: start.toISOString().split('T')[0],
-                end: now.toISOString().split('T')[0]
+                start: formatDateForApi(start),
+                end: formatDateForApi(now)
             };
         case 'year':
             start = new Date(now);
-            start.setFullYear(now.getFullYear() - 1);
+            start.setMonth(0, 1);
             return {
-                start: start.toISOString().split('T')[0],
-                end: now.toISOString().split('T')[0]
+                start: formatDateForApi(start),
+                end: formatDateForApi(now)
             };
         case 'all':
         default:
