@@ -52,6 +52,39 @@
       cursor: pointer;
     }
 
+    .swap-btn {
+      background: none;
+      border: 1px solid var(--input-border);
+      border-radius: 4px;
+      color: var(--text-color);
+      cursor: pointer;
+      padding: 0.45em 0.55em;
+      line-height: 1;
+      flex-shrink: 0;
+      width: auto;
+      max-width: none;
+      margin: 0.5em 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .swap-btn:hover {
+      background-color: var(--button-bg);
+    }
+
+    .stop-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+
+    .stop-row select {
+      flex: 1;
+      width: 100%;
+      max-width: 300px;
+    }
+
     button:hover {
       background-color: #444;
     }
@@ -211,12 +244,17 @@
     </select><br>
 
     <label for="boardStop">Boarding Stop:</label>
-    <div style="display:inline-flex;align-items:center;gap:0.5em;">
+    <div class="stop-row">
       <select id="boardStop">
         <option value="">Select boarding stop</option>
       </select>
-      <button type="button" onclick="swapStops()" title="Swap stops"
-        style="background:none;border:none;cursor:pointer;font-size:1.25rem;padding:0.25em;color:var(--text-color);line-height:1;">🔄</button>
+      <button type="button" class="swap-btn" onclick="swapStops()" title="Swap boarding and departing stops">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 16V4m0 0L3 8m4-4l4 4" />
+          <path d="M17 8v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      </button>
     </div><br>
 
     <label for="departStop">Departing Stop:</label>
