@@ -8,6 +8,7 @@ import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timezone
 from difflib import SequenceMatcher
+from urllib.parse import quote
 from typing import Optional
 
 import requests
@@ -38,8 +39,10 @@ HEADERS = {
 
 IMDB_SUGGESTION_BASE_URL = "https://v2.sg.media-imdb.com/suggestion"
 IMDB_MATCH_CACHE: dict[tuple[str, Optional[int]], Optional[dict]] = {}
+LETTERBOXD_SEARCH_CACHE: dict[str, list[str]] = {}
 
 SPECIAL_EVENT_TITLE_PATTERNS = [
+    (re.compile(r"\[[^\]]+\]", re.IGNORECASE), "Special screening format"),
     (re.compile(r"\bq\s*&\s*a\b|\bq and a\b", re.IGNORECASE), "Q&A event"),
     (re.compile(r"\binterview\b|\bconversation\b|\bdiscussion\b|\btalk\b|\bmasterclass\b", re.IGNORECASE), "Interview or discussion event"),
     (re.compile(r"\bin person\b|\bwith special guest\b|\bguest\b", re.IGNORECASE), "Guest appearance event"),
@@ -185,8 +188,10 @@ def _fetch_imdb_movie_match(title: str, year: Optional[int]) -> Optional[dict]:
                 score += 0.35
             elif year_delta == 1:
                 score += 0.15
-            elif year_delta > 2:
-                continue
+            elif year_delta <= 5:
+                score -= 0.08 * year_delta
+            else:
+                score -= 0.25
 
         if score > best_score:
             best_score = score
@@ -198,6 +203,42 @@ def _fetch_imdb_movie_match(title: str, year: Optional[int]) -> Optional[dict]:
 
     IMDB_MATCH_CACHE[cache_key] = best_match
     return best_match
+
+
+def _search_letterboxd_film_paths(query: str) -> list[str]:
+    cleaned_query = _clean_title_for_external_search(query)
+    if not cleaned_query:
+        return []
+
+    if cleaned_query in LETTERBOXD_SEARCH_CACHE:
+        return LETTERBOXD_SEARCH_CACHE[cleaned_query]
+
+    search_url = f"{LETTERBOXD_BASE_URL}/search/{quote(cleaned_query)}/"
+    try:
+        response = requests.get(search_url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+    except requests.RequestException:
+        LETTERBOXD_SEARCH_CACHE[cleaned_query] = []
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    paths = []
+    seen_paths = set()
+    for link in soup.select('a[href^="/film/"]'):
+        href = link.get("href", "")
+        match = re.match(r"^(/film/[^/?#]+/)$", href)
+        if not match:
+            continue
+        path = match.group(1)
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+        paths.append(path)
+        if len(paths) >= 8:
+            break
+
+    LETTERBOXD_SEARCH_CACHE[cleaned_query] = paths
+    return paths
 
 
 def fetch_calendar_page() -> BeautifulSoup:
@@ -274,6 +315,7 @@ def parse_day_block(day_block) -> list[dict]:
             fmt = "/".join(parts[3:]).strip()
 
         for index, showtime in enumerate(times):
+            ticket_url = ticket_links[index] if index < len(ticket_links) else None
             showings.append(
                 {
                     "date": target_date,
@@ -286,7 +328,8 @@ def parse_day_block(day_block) -> list[dict]:
                     "format": fmt,
                     "description": description,
                     "time": showtime,
-                    "ticket_url": ticket_links[index] if index < len(ticket_links) else None,
+                    "ticket_url": ticket_url,
+                    "sold_out": ticket_url is None,
                 }
             )
 
@@ -399,7 +442,7 @@ def _extract_star_rating(star_text: str) -> Optional[float]:
     return full_stars + half_star
 
 
-def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -> bool:
+def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int], allow_year_mismatch: bool = False) -> bool:
     og_title = soup.select_one('meta[property="og:title"]')
     if not og_title:
         return False
@@ -413,13 +456,13 @@ def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -
 
     if year is not None:
         year_match = re.search(r"\((\d{4})\)$", page_title)
-        if year_match and int(year_match.group(1)) != year:
+        if year_match and int(year_match.group(1)) != year and not allow_year_mismatch:
             return False
 
     return True
 
 
-def _validate_member_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -> bool:
+def _validate_member_film_match(soup: BeautifulSoup, title: str, year: Optional[int], allow_year_mismatch: bool = False) -> bool:
     og_title = soup.select_one('meta[property="og:title"]')
     if not og_title:
         return False
@@ -439,20 +482,15 @@ def _validate_member_film_match(soup: BeautifulSoup, title: str, year: Optional[
     if raw_norm != title_norm and similarity < 0.72:
         return False
 
-    if year is not None and extracted_year is not None and extracted_year != year:
+    if year is not None and extracted_year is not None and extracted_year != year and not allow_year_mismatch:
         return False
 
     return True
 
 
-def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optional[str] = None) -> Optional[float]:
-    candidate_paths = []
-    if film_path:
-        candidate_paths.append(film_path)
-    candidate_paths.extend(_generate_slug_candidates(title, year))
-
+def _try_letterboxd_paths(paths: list[str], title: str, year: Optional[int], allow_year_mismatch: bool = False) -> Optional[float]:
     seen_paths = set()
-    for path in candidate_paths:
+    for path in paths:
         if path in seen_paths:
             continue
         seen_paths.add(path)
@@ -465,40 +503,23 @@ def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optiona
             continue
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        if not _validate_film_match(soup, title, year):
+        if not _validate_film_match(soup, title, year, allow_year_mismatch=allow_year_mismatch):
             continue
 
         rating = _extract_rating_from_film_page(soup)
         if rating is not None:
             return rating
 
-    imdb_match = _fetch_imdb_movie_match(title, year)
-    if imdb_match and imdb_match["title"] != title:
-        for path in _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year):
-            if path in seen_paths:
-                continue
-            seen_paths.add(path)
-
-            try:
-                resp = requests.get(f"{LETTERBOXD_BASE_URL}{path}", headers=HEADERS, timeout=15)
-                if resp.status_code != 200:
-                    continue
-            except requests.RequestException:
-                continue
-
-            soup = BeautifulSoup(resp.text, "html.parser")
-            if not _validate_film_match(soup, imdb_match["title"], imdb_match.get("year") or year):
-                continue
-
-            rating = _extract_rating_from_film_page(soup)
-            if rating is not None:
-                return rating
-
     return None
 
 
-def _fetch_member_film_data(username: str, title: str, year: Optional[int]) -> dict:
-    for path in _generate_slug_candidates(title, year):
+def _try_member_letterboxd_paths(username: str, paths: list[str], title: str, year: Optional[int], allow_year_mismatch: bool = False) -> dict:
+    seen_paths = set()
+    for path in paths:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+
         try:
             resp = requests.get(f"{LETTERBOXD_BASE_URL}/{username}{path}", headers=HEADERS, timeout=15)
             if resp.status_code != 200:
@@ -507,30 +528,83 @@ def _fetch_member_film_data(username: str, title: str, year: Optional[int]) -> d
             continue
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        if not _validate_member_film_match(soup, title, year):
+        if not _validate_member_film_match(soup, title, year, allow_year_mismatch=allow_year_mismatch):
             continue
 
         rating_meta = soup.select_one('meta[name="twitter:data2"]')
         personal_rating = _extract_star_rating(rating_meta.get("content", "") if rating_meta else "")
         return {"watched": True, "personal_rating": personal_rating}
 
+    return {"watched": False, "personal_rating": None}
+
+
+def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optional[str] = None) -> Optional[float]:
+    candidate_paths = []
+    if film_path:
+        candidate_paths.append(film_path)
+    candidate_paths.extend(_generate_slug_candidates(title, year))
+
+    rating = _try_letterboxd_paths(candidate_paths, title, year)
+    if rating is not None:
+        return rating
+
+    rating = _try_letterboxd_paths(_search_letterboxd_film_paths(title), title, year)
+    if rating is not None:
+        return rating
+
     imdb_match = _fetch_imdb_movie_match(title, year)
-    if imdb_match and imdb_match["title"] != title:
-        for path in _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year):
-            try:
-                resp = requests.get(f"{LETTERBOXD_BASE_URL}/{username}{path}", headers=HEADERS, timeout=15)
-                if resp.status_code != 200:
-                    continue
-            except requests.RequestException:
-                continue
+    if imdb_match:
+        rating = _try_letterboxd_paths(
+            _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year),
+            imdb_match["title"],
+            imdb_match.get("year") or year,
+            allow_year_mismatch=True,
+        )
+        if rating is not None:
+            return rating
 
-            soup = BeautifulSoup(resp.text, "html.parser")
-            if not _validate_member_film_match(soup, imdb_match["title"], imdb_match.get("year") or year):
-                continue
+        rating = _try_letterboxd_paths(
+            _search_letterboxd_film_paths(imdb_match["title"]),
+            imdb_match["title"],
+            imdb_match.get("year") or year,
+            allow_year_mismatch=True,
+        )
+        if rating is not None:
+            return rating
 
-            rating_meta = soup.select_one('meta[name="twitter:data2"]')
-            personal_rating = _extract_star_rating(rating_meta.get("content", "") if rating_meta else "")
-            return {"watched": True, "personal_rating": personal_rating}
+    return None
+
+
+def _fetch_member_film_data(username: str, title: str, year: Optional[int]) -> dict:
+    info = _try_member_letterboxd_paths(username, _generate_slug_candidates(title, year), title, year)
+    if info["watched"]:
+        return info
+
+    info = _try_member_letterboxd_paths(username, _search_letterboxd_film_paths(title), title, year)
+    if info["watched"]:
+        return info
+
+    imdb_match = _fetch_imdb_movie_match(title, year)
+    if imdb_match:
+        info = _try_member_letterboxd_paths(
+            username,
+            _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year),
+            imdb_match["title"],
+            imdb_match.get("year") or year,
+            allow_year_mismatch=True,
+        )
+        if info["watched"]:
+            return info
+
+        info = _try_member_letterboxd_paths(
+            username,
+            _search_letterboxd_film_paths(imdb_match["title"]),
+            imdb_match["title"],
+            imdb_match.get("year") or year,
+            allow_year_mismatch=True,
+        )
+        if info["watched"]:
+            return info
 
     return {"watched": False, "personal_rating": None}
 
@@ -687,16 +761,6 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
         if pattern.search(description):
             reasons.append(reason)
 
-    has_letterboxd_signals = _entry_has_letterboxd_signals(entry)
-    has_component_match = False
-    for component in title_context["components"]:
-        if _fetch_imdb_movie_match(component["search_title"], showing.get("year")) is not None:
-            has_component_match = True
-            break
-
-    if not has_letterboxd_signals and not has_component_match:
-            reasons.append("No Letterboxd or IMDb movie match found")
-
     deduped_reasons = []
     for reason in reasons:
         if reason not in deduped_reasons:
@@ -776,6 +840,7 @@ def group_by_film(showings: list[dict]) -> list[dict]:
                 "date": showing["date"],
                 "time": showing["time"],
                 "ticket_url": showing["ticket_url"],
+                "sold_out": showing.get("sold_out", False),
             }
         )
 

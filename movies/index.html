@@ -326,6 +326,12 @@
             color: #ccc;
         }
 
+        .showing-chip.sold-out {
+            color: #8a8a8a;
+            text-decoration: line-through;
+            opacity: 0.75;
+        }
+
         .showing-chip a {
             color: inherit;
             text-decoration: none;
@@ -914,7 +920,8 @@
                     const dateLabel = `<span class="chip-date">${formatDate(s.date)}</span>`;
                     const timeLabel = s.time;
                     const inner = `${dateLabel}${timeLabel}`;
-                    return `<span class="showing-chip">${s.ticket_url ? `<a href="${s.ticket_url}" target="_blank" rel="noopener">${inner}</a>` : inner}</span>`;
+                    const soldOutClass = s.sold_out ? ' sold-out' : '';
+                    return `<span class="showing-chip${soldOutClass}">${s.ticket_url ? `<a href="${s.ticket_url}" target="_blank" rel="noopener">${inner}</a>` : inner}</span>`;
                 }).join('');
 
                 card.innerHTML = `
