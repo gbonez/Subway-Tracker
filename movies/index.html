@@ -288,7 +288,22 @@
     <div id="film-list" style="display:none;"></div>
 
     <script>
-        const API = 'https://subway-tracker-production.up.railway.app';
+        function getApiBase() {
+            const isLocalStaticPage = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+            const isRailwayApp = window.location.hostname.endsWith('up.railway.app');
+
+            if (isLocalStaticPage) {
+                return 'http://127.0.0.1:8010';
+            }
+
+            if (isRailwayApp) {
+                return window.location.origin;
+            }
+
+            return 'https://subway-tracker-production.up.railway.app';
+        }
+
+        const API = getApiBase();
         let allFilms = [];
 
         async function loadSchedule() {

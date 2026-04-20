@@ -12,7 +12,7 @@ import json
 import os
 import re
 import time
-from datetime import date, timedelta
+from datetime import date
 from typing import Optional
 from urllib.parse import quote
 
@@ -24,8 +24,8 @@ from bs4 import BeautifulSoup
 # ---------------------------------------------------------------------------
 SCHEDULE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "metrograph_schedule.json")
 LETTERBOXD_USERNAME = "gbonez100"
-# How many days ahead to scrape (Metrograph typically shows ~2 weeks)
-DAYS_AHEAD = 30
+ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "false").lower() == "true"
+METROGRAPH_CALENDAR_URL = "https://metrograph.com/nyc/"
 
 HEADERS = {
     "User-Agent": (
@@ -40,29 +40,34 @@ HEADERS = {
 # Metrograph scraping
 # ---------------------------------------------------------------------------
 
-def scrape_day(target_date: date) -> list[dict]:
-    """Scrape all showings for a single date. Returns list of showing dicts."""
-    url = f"https://metrograph.com/nyc/?date={target_date.isoformat()}"
+def fetch_calendar_page() -> BeautifulSoup:
+    """Fetch Metrograph's public calendar page once and return a parsed soup."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(METROGRAPH_CALENDAR_URL, headers=HEADERS, timeout=20)
         resp.raise_for_status()
     except requests.RequestException as e:
-        print(f"  ⚠️  Failed to fetch {url}: {e}")
+        raise RuntimeError(f"Failed to fetch Metrograph calendar: {e}") from e
+
+    return BeautifulSoup(resp.text, "html.parser")
+
+
+def parse_day_block(day_block) -> list[dict]:
+    """Parse one Metrograph calendar day block into showing dictionaries."""
+    day_id = day_block.get("id", "")
+    match = re.search(r"calendar-list-day-(\d{4}-\d{2}-\d{2})", day_id)
+    if not match:
+        return []
+    target_date = match.group(1)
+
+    if "closed" in (day_block.get("class") or []):
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
     showings = []
 
-    # Each film block is an <article> or a section anchored by an <h4> with a link
-    # The page structure groups by film within the day:
-    #   <h4><a href="/film/?vista_film_id=...">TITLE</a></h4>
-    #   <p> Director / Year / Runtime / Format  [optional special note] </p>
-    #   show times are <a> tags linking to t.metrograph.com ticketing
-    #   or bare text nodes for sold-out / no-ticket times
-
-    # Find all film headings
-    film_headings = soup.find_all("h4")
-    for h4 in film_headings:
+    for film_block in day_block.select("div.item.film-thumbnail.homepage-in-theater-movie"):
+        h4 = film_block.find("h4")
+        if not h4:
+            continue
         link_tag = h4.find("a", href=True)
         if not link_tag:
             continue
@@ -75,34 +80,29 @@ def scrape_day(target_date: date) -> list[dict]:
         film_id_match = re.search(r"vista_film_id=(\d+)", film_url)
         film_id = film_id_match.group(1) if film_id_match else None
 
-        # The metadata and times are siblings after the h4
-        meta_text = ""
+        meta_el = film_block.find("div", class_="film-metadata")
+        meta_text = meta_el.get_text(" ", strip=True) if meta_el else ""
+
+        description_el = film_block.find("div", class_="film-description")
+        description = description_el.get_text(" ", strip=True) if description_el else None
+
+        showtimes_el = film_block.find("div", class_="showtimes")
         times = []
         ticket_links = []
-
-        # Walk siblings until next h4 or end
-        for sibling in h4.next_siblings:
-            if sibling.name == "h4":
-                break
-            if sibling.name in ("p", "div", None):
-                text = sibling.get_text(" ", strip=True) if hasattr(sibling, "get_text") else str(sibling).strip()
-                if not meta_text and ("/" in text or "min" in text.lower()):
-                    meta_text = text
-            # Ticket time links
-            if hasattr(sibling, "find_all"):
-                for a in sibling.find_all("a", href=True):
-                    href = a["href"]
+        if showtimes_el:
+            time_links = showtimes_el.find_all("a", href=True)
+            if time_links:
+                for a in time_links:
                     t = a.get_text(strip=True)
-                    if "t.metrograph.com" in href and t:
+                    href = a["href"]
+                    if t:
                         times.append(t)
                         ticket_links.append(href)
-                # Also catch bare time text nodes not wrapped in <a>
-                for txt_node in sibling.find_all(string=True, recursive=False):
-                    t = txt_node.strip()
-                    if re.match(r"\d{1,2}:\d{2}(am|pm)", t, re.IGNORECASE):
-                        if t not in times:
-                            times.append(t)
-                            ticket_links.append(None)
+            else:
+                raw_text = showtimes_el.get_text(" ", strip=True)
+                for t in re.findall(r"\d{1,2}:\d{2}(?:am|pm)", raw_text, re.IGNORECASE):
+                    times.append(t)
+                    ticket_links.append(None)
 
         # Parse director, year, runtime, format from meta_text
         # e.g. "Andrei Tarkovsky / 1983 / 125min / 4K DCP"
@@ -120,7 +120,7 @@ def scrape_day(target_date: date) -> list[dict]:
 
         for i, t in enumerate(times):
             showings.append({
-                "date": target_date.isoformat(),
+                "date": target_date,
                 "title": title,
                 "film_id": film_id,
                 "film_url": f"https://metrograph.com{film_url}" if film_url.startswith("/") else film_url,
@@ -128,6 +128,7 @@ def scrape_day(target_date: date) -> list[dict]:
                 "year": year,
                 "runtime": runtime,
                 "format": fmt,
+                "description": description,
                 "time": t,
                 "ticket_url": ticket_links[i] if i < len(ticket_links) else None,
             })
@@ -136,22 +137,20 @@ def scrape_day(target_date: date) -> list[dict]:
 
 
 def scrape_schedule() -> list[dict]:
-    """Scrape all upcoming days. Returns deduplicated list of showings."""
-    today = date.today()
+    """Scrape the public Metrograph calendar page and return deduplicated showings."""
+    soup = fetch_calendar_page()
     all_showings = []
     seen = set()
 
-    for delta in range(DAYS_AHEAD):
-        d = today + timedelta(days=delta)
-        print(f"  Scraping {d.isoformat()}...")
-        day_showings = scrape_day(d)
+    day_blocks = soup.select("div.calendar-list-day")
+    print(f"  Found {len(day_blocks)} calendar day blocks.")
+    for day_block in day_blocks:
+        day_showings = parse_day_block(day_block)
         for s in day_showings:
             key = (s["date"], s["title"], s["time"])
             if key not in seen:
                 seen.add(key)
                 all_showings.append(s)
-        # Be polite
-        time.sleep(0.5)
 
     return all_showings
 
@@ -234,6 +233,12 @@ def _norm(s: str) -> str:
 
 def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
     """Add on_watchlist and letterboxd_rating fields to each showing."""
+    if not ENABLE_LETTERBOXD:
+        for s in showings:
+            s["on_watchlist"] = False
+            s["letterboxd_rating"] = None
+        return showings
+
     print("  Fetching Letterboxd watchlist...")
     watchlist = _fetch_letterboxd_watchlist(LETTERBOXD_USERNAME)
     print(f"  Found {len(watchlist)} titles on watchlist.")
@@ -306,7 +311,7 @@ def group_by_film(showings: list[dict]) -> list[dict]:
 def main():
     print("🎬 Scraping Metrograph schedule...")
     showings = scrape_schedule()
-    print(f"  Found {len(showings)} total showings across {DAYS_AHEAD} days.")
+    print(f"  Found {len(showings)} total showings.")
 
     print("🔤 Enriching with Letterboxd data...")
     showings = enrich_with_letterboxd(showings)
