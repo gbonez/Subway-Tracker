@@ -27,6 +27,11 @@ LETTERBOXD_USERNAME = "gbonez100"
 ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "true").lower() == "true"
 METROGRAPH_CALENDAR_URL = "https://metrograph.com/nyc/"
 LETTERBOXD_BASE_URL = "https://letterboxd.com"
+LETTERBOXD_FRIEND_USERNAMES = [
+    username.strip()
+    for username in os.getenv("LETTERBOXD_FRIEND_USERNAMES", "").split(",")
+    if username.strip()
+]
 
 HEADERS = {
     "User-Agent": (
@@ -224,6 +229,19 @@ def _extract_rating_from_film_page(soup: BeautifulSoup) -> Optional[float]:
     return None
 
 
+def _extract_star_rating(star_text: str) -> Optional[float]:
+    """Convert Letterboxd star glyphs into a 0.5-step numeric rating."""
+    if not star_text:
+        return None
+
+    star_text = star_text.strip()
+    full_stars = star_text.count("★")
+    half_star = 0.5 if "½" in star_text else 0.0
+    if full_stars == 0 and half_star == 0:
+        return None
+    return full_stars + half_star
+
+
 def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -> bool:
     """Check that a fetched Letterboxd film page matches the intended movie."""
     og_title = soup.select_one('meta[property="og:title"]')
@@ -241,6 +259,30 @@ def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -
         year_match = re.search(r"\((\d{4})\)$", page_title)
         if year_match and int(year_match.group(1)) != year:
             return False
+
+    return True
+
+
+def _validate_member_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -> bool:
+    """Check that a user-specific film page matches the intended movie."""
+    og_title = soup.select_one('meta[property="og:title"]')
+    if not og_title:
+        return False
+
+    raw_title = og_title.get("content", "")
+    year_match = re.search(r"\((\d{4})\)", raw_title)
+    extracted_year = int(year_match.group(1)) if year_match else None
+
+    raw_title = re.sub(r"^A\s+[★½\s]*review\s+of\s+", "", raw_title)
+    raw_title = re.sub(r"^A\s+review\s+of\s+", "", raw_title)
+    raw_title = re.sub(r"^Watched\s+", "", raw_title)
+    raw_title = re.sub(r"\s*\(\d{4}\).*$", "", raw_title).strip()
+
+    if _norm(raw_title) != _norm(re.sub(r"\[[^\]]*\]|\([^\)]*\)", " ", title)):
+        return False
+
+    if year is not None and extracted_year is not None and extracted_year != year:
+        return False
 
     return True
 
@@ -281,6 +323,29 @@ def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optiona
     return None
 
 
+def _fetch_member_film_data(username: str, title: str, year: Optional[int]) -> dict:
+    """Fetch watched status and personal rating from a public user-specific film page."""
+    slug = _slugify_title(title)
+    if not slug:
+        return {"watched": False, "personal_rating": None}
+
+    url = f"{LETTERBOXD_BASE_URL}/{username}/film/{slug}/"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=15)
+        if resp.status_code != 200:
+            return {"watched": False, "personal_rating": None}
+    except requests.RequestException:
+        return {"watched": False, "personal_rating": None}
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    if not _validate_member_film_match(soup, title, year):
+        return {"watched": False, "personal_rating": None}
+
+    rating_meta = soup.select_one('meta[name="twitter:data2"]')
+    personal_rating = _extract_star_rating(rating_meta.get("content", "") if rating_meta else "")
+    return {"watched": True, "personal_rating": personal_rating}
+
+
 def _norm(s: str) -> str:
     """Normalise a title string for comparison."""
     return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
@@ -292,6 +357,10 @@ def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
         for s in showings:
             s["on_watchlist"] = False
             s["letterboxd_rating"] = None
+            s["watched"] = False
+            s["personal_rating"] = None
+            s["friend_watch_count"] = 0
+            s["friend_avg_rating"] = None
         return showings
 
     print("  Fetching Letterboxd watchlist...")
@@ -300,6 +369,8 @@ def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
 
     # Deduplicate film lookups (title+year)
     film_ratings: dict[tuple, Optional[float]] = {}
+    member_data: dict[tuple, dict] = {}
+    friend_data: dict[tuple, dict] = {}
     unique_films = {(s["title"], s["year"]) for s in showings}
 
     print(f"  Fetching Letterboxd ratings for {len(unique_films)} unique films...")
@@ -310,9 +381,33 @@ def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
             film_ratings[key] = _fetch_letterboxd_rating(title, year, watchlist_path)
             time.sleep(0.3)
 
+        if key not in member_data:
+            member_data[key] = _fetch_member_film_data(LETTERBOXD_USERNAME, title, year)
+            time.sleep(0.2)
+
+        if key not in friend_data:
+            watched_count = 0
+            ratings = []
+            for friend_username in LETTERBOXD_FRIEND_USERNAMES:
+                info = _fetch_member_film_data(friend_username, title, year)
+                if info["watched"]:
+                    watched_count += 1
+                    if info["personal_rating"] is not None:
+                        ratings.append(info["personal_rating"])
+                time.sleep(0.15)
+
+            friend_data[key] = {
+                "friend_watch_count": watched_count,
+                "friend_avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
+            }
+
     for s in showings:
         s["on_watchlist"] = _norm(s["title"]) in watchlist
         s["letterboxd_rating"] = film_ratings.get((s["title"], s["year"]))
+        s["watched"] = member_data.get((s["title"], s["year"]), {}).get("watched", False)
+        s["personal_rating"] = member_data.get((s["title"], s["year"]), {}).get("personal_rating")
+        s["friend_watch_count"] = friend_data.get((s["title"], s["year"]), {}).get("friend_watch_count", 0)
+        s["friend_avg_rating"] = friend_data.get((s["title"], s["year"]), {}).get("friend_avg_rating")
 
     return showings
 
@@ -340,6 +435,10 @@ def group_by_film(showings: list[dict]) -> list[dict]:
                 "format": s["format"],
                 "on_watchlist": s.get("on_watchlist", False),
                 "letterboxd_rating": s.get("letterboxd_rating"),
+                "watched": s.get("watched", False),
+                "personal_rating": s.get("personal_rating"),
+                "friend_watch_count": s.get("friend_watch_count", 0),
+                "friend_avg_rating": s.get("friend_avg_rating"),
                 "showings": [],
             }
         films[key]["showings"].append({
@@ -353,8 +452,10 @@ def group_by_film(showings: list[dict]) -> list[dict]:
     # Sort: watchlist first, then by letterboxd_rating desc (None last), then alpha
     def sort_key(f):
         watchlist_order = 0 if f["on_watchlist"] else 1
-        rating = f["letterboxd_rating"] if f["letterboxd_rating"] is not None else -1
-        return (watchlist_order, -rating, f["title"])
+        friend_watch_count = f["friend_watch_count"] if f["friend_watch_count"] is not None else -1
+        friend_avg_rating = f["friend_avg_rating"] if f["friend_avg_rating"] is not None else -1
+        public_rating = f["letterboxd_rating"] if f["letterboxd_rating"] is not None else -1
+        return (watchlist_order, -friend_watch_count, -friend_avg_rating, -public_rating, f["title"])
 
     film_list.sort(key=sort_key)
     return film_list
