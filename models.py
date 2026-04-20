@@ -2,9 +2,9 @@
 Database models and configuration for the NYC Subway Tracker
 """
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean, text
+from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, relationship, sessionmaker
 
 # -------------------------------
 # DATABASE CONFIGURATION
@@ -39,6 +39,10 @@ else:
 Base = declarative_base()
 SessionLocal = sessionmaker(bind=engine)
 
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+
 def get_db():
     db = SessionLocal()
     try:
@@ -59,3 +63,41 @@ class SubwayRide(Base):
     depart_stop = Column(String, nullable=False)
     date = Column(Date, nullable=False)
     transferred = Column(Boolean, default=False)
+
+
+class MovieLetterboxdData(Base):
+    __tablename__ = "movie_letterboxd_data"
+    __table_args__ = (
+        UniqueConstraint("normalized_title", "year", name="uq_movie_letterboxd_title_year"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    normalized_title = Column(String, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)
+    letterboxd_rating = Column(Float, nullable=True)
+    on_watchlist = Column(Boolean, default=False, nullable=False)
+    watched = Column(Boolean, default=False, nullable=False)
+    personal_rating = Column(Float, nullable=True)
+    last_scanned_at = Column(DateTime, nullable=True)
+
+    friend_ratings = relationship(
+        "MovieFriendRating",
+        back_populates="movie",
+        cascade="all, delete-orphan",
+    )
+
+
+class MovieFriendRating(Base):
+    __tablename__ = "movie_friend_ratings"
+    __table_args__ = (
+        UniqueConstraint("movie_id", "friend_username", name="uq_movie_friend_username"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    movie_id = Column(Integer, ForeignKey("movie_letterboxd_data.id", ondelete="CASCADE"), nullable=False, index=True)
+    friend_username = Column(String, nullable=False)
+    friend_display_name = Column(String, nullable=True)
+    rating = Column(Float, nullable=True)
+
+    movie = relationship("MovieLetterboxdData", back_populates="friend_ratings")

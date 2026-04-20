@@ -1,15 +1,15 @@
 """
-Movie route controllers — Metrograph schedule
+Movie route controllers — Metrograph schedule and Letterboxd sync
 """
 import json
 import os
-import subprocess
-import sys
 
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
-SCHEDULE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "metrograph_schedule.json")
+from models import get_db
+from services.movie_service import SCHEDULE_PATH, build_schedule_payload, update_letterboxd_table, write_schedule_payload
 
 
 async def get_schedule():
@@ -22,31 +22,23 @@ async def get_schedule():
     return JSONResponse(content=data)
 
 
-async def run_scraper():
-    """Trigger the Metrograph scraper synchronously and return the result."""
-    scraper = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "scripts", "scrape_metrograph.py")
-    )
-    if not os.path.exists(scraper):
-        raise HTTPException(status_code=500, detail="Scraper script not found.")
+async def run_scraper(db: Session = Depends(get_db)):
+    """Fetch Metrograph, merge stored Letterboxd data, cache the payload, and return it."""
+    try:
+        payload = build_schedule_payload(db)
+        write_schedule_payload(payload)
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Metrograph scrape failed: {error}") from error
 
-    result = subprocess.run(
-        [sys.executable, scraper],
-        capture_output=True,
-        text=True,
-        timeout=300,
-    )
+    return JSONResponse(content=payload)
 
-    if result.returncode != 0:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Scraper failed: {result.stderr or result.stdout}",
-        )
 
-    # Return refreshed schedule
-    path = os.path.abspath(SCHEDULE_PATH)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=500, detail="Scraper ran but produced no output file.")
-    with open(path, "r") as f:
-        data = json.load(f)
-    return JSONResponse(content=data)
+async def run_letterboxd_scan(db: Session = Depends(get_db)):
+    """Scan Letterboxd data for the current Metrograph slate and store it in the database."""
+    try:
+        payload = update_letterboxd_table(db)
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Letterboxd scan failed: {error}") from error
+
+    return JSONResponse(content=payload)
