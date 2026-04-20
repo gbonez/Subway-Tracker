@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metrograph Showtimes</title>
+    <link rel="icon" type="image/x-icon" href="../forrest.ico">
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #4a9eff;
+            --border-color: #333;
+            --highlight-color: #1e1e1e;
+            --input-bg: #1e1e1e;
+            --button-bg: #333;
+            --button-text: #fff;
+            --watchlist-color: #f5c542;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+
+        a.back-home {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4em;
+            color: #888;
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 2rem;
+            transition: color 0.2s;
+        }
+
+        a.back-home:hover {
+            color: var(--text-color);
+        }
+
+        .top-bar {
+            max-width: 800px;
+            margin: 0 auto 2rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, var(--accent-color), #6c5ce7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .meta-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .updated-at {
+            color: #666;
+            font-size: 0.85rem;
+        }
+
+        button.scrape-btn {
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 0.45em 1em;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button.scrape-btn:hover {
+            background-color: #444;
+        }
+
+        button.scrape-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #scrape-status {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        /* Filter bar */
+        .filter-bar {
+            max-width: 800px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-bar label {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .filter-bar input[type="text"],
+        .filter-bar select {
+            background: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 0.4em 0.75em;
+            font-size: 0.9rem;
+        }
+
+        .filter-bar input[type="checkbox"] {
+            margin-right: 0.3em;
+            accent-color: var(--watchlist-color);
+        }
+
+        /* Film list */
+        #film-list {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .film-card {
+            background: var(--highlight-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+            transition: border-color 0.2s;
+        }
+
+        .film-card.watchlist {
+            border-left: 3px solid var(--watchlist-color);
+        }
+
+        .film-title-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.3rem;
+        }
+
+        .film-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .film-title a {
+            color: var(--text-color);
+            text-decoration: none;
+        }
+
+        .film-title a:hover {
+            color: var(--accent-color);
+        }
+
+        .badge-watchlist {
+            font-size: 0.75rem;
+            background: rgba(245, 197, 66, 0.15);
+            color: var(--watchlist-color);
+            border: 1px solid rgba(245, 197, 66, 0.3);
+            border-radius: 4px;
+            padding: 0.15em 0.5em;
+            white-space: nowrap;
+        }
+
+        .film-meta {
+            font-size: 0.82rem;
+            color: #777;
+            margin-bottom: 0.75rem;
+        }
+
+        .film-meta span {
+            margin-right: 0.75rem;
+        }
+
+        .rating {
+            color: #f5c542;
+            font-weight: 500;
+        }
+
+        .showings-label {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #555;
+            margin-bottom: 0.4rem;
+        }
+
+        .showings-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .showing-chip {
+            font-size: 0.8rem;
+            background: #252525;
+            border: 1px solid #3a3a3a;
+            border-radius: 5px;
+            padding: 0.25em 0.6em;
+            white-space: nowrap;
+            color: #ccc;
+        }
+
+        .showing-chip a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .showing-chip a:hover {
+            color: var(--accent-color);
+        }
+
+        .showing-chip .chip-date {
+            color: #666;
+            margin-right: 0.3em;
+        }
+
+        #loading,
+        #error {
+            max-width: 800px;
+            margin: 2rem auto;
+            font-size: 1rem;
+        }
+
+        #error {
+            color: #ff6b6b;
+        }
+
+        @media (max-width: 600px) {
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .film-card {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <a href="/" class="back-home">← Return to Home</a>
+
+    <div class="top-bar">
+        <h1><span class="gradient-text">Metrograph</span> 🎬</h1>
+        <div class="meta-row">
+            <span class="updated-at" id="updated-at">Loading...</span>
+            <button class="scrape-btn" id="scrape-btn" onclick="runScraper()">↻ Refresh Schedule</button>
+            <span id="scrape-status"></span>
+        </div>
+    </div>
+
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Search films..." oninput="renderFilms()" style="width:200px;">
+        <label><input type="checkbox" id="watchlist-only" onchange="renderFilms()"> Watchlist only</label>
+        <select id="date-filter" onchange="renderFilms()">
+            <option value="">All dates</option>
+        </select>
+    </div>
+
+    <div id="loading">Loading schedule...</div>
+    <div id="error" style="display:none;"></div>
+    <div id="film-list" style="display:none;"></div>
+
+    <script>
+        const API = 'https://subway-tracker-production.up.railway.app';
+        let allFilms = [];
+
+        async function loadSchedule() {
+            try {
+                const res = await fetch(`${API}/movies/schedule`);
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        showError('No schedule yet. Click "Refresh Schedule" to scrape Metrograph.');
+                    } else {
+                        showError(`Failed to load schedule (${res.status}).`);
+                    }
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('film-list').style.display = 'flex';
+                document.getElementById('updated-at').textContent = `Last updated: ${data.updated_at || 'unknown'}`;
+                allFilms = data.films || [];
+                populateDateFilter();
+                renderFilms();
+            } catch (e) {
+                showError('Could not reach the server.');
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById('loading').style.display = 'none';
+            const el = document.getElementById('error');
+            el.textContent = msg;
+            el.style.display = 'block';
+        }
+
+        function populateDateFilter() {
+            const dates = new Set();
+            allFilms.forEach(f => f.showings.forEach(s => dates.add(s.date)));
+            const sorted = [...dates].sort();
+            const sel = document.getElementById('date-filter');
+            sorted.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = formatDate(d);
+                sel.appendChild(opt);
+            });
+        }
+
+        function formatDate(iso) {
+            const [y, m, d] = iso.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+
+        function renderFilms() {
+            const query = document.getElementById('search').value.toLowerCase();
+            const watchlistOnly = document.getElementById('watchlist-only').checked;
+            const dateFilter = document.getElementById('date-filter').value;
+
+            let films = allFilms;
+
+            if (watchlistOnly) films = films.filter(f => f.on_watchlist);
+            if (query) films = films.filter(f =>
+                f.title.toLowerCase().includes(query) ||
+                (f.director && f.director.toLowerCase().includes(query))
+            );
+            if (dateFilter) films = films.filter(f => f.showings.some(s => s.date === dateFilter));
+
+            const list = document.getElementById('film-list');
+            list.innerHTML = '';
+
+            if (!films.length) {
+                list.innerHTML = '<p style="color:#666;">No films match your filters.</p>';
+                return;
+            }
+
+            films.forEach(film => {
+                const showings = dateFilter
+                    ? film.showings.filter(s => s.date === dateFilter)
+                    : film.showings;
+
+                const card = document.createElement('div');
+                card.className = 'film-card' + (film.on_watchlist ? ' watchlist' : '');
+
+                const ratingHtml = film.letterboxd_rating != null
+                    ? `<span class="rating">★ ${film.letterboxd_rating.toFixed(1)}</span>`
+                    : '';
+
+                const chipHtml = showings.map(s => {
+                    const dateLabel = `<span class="chip-date">${formatDate(s.date)}</span>`;
+                    const timeLabel = s.time;
+                    const inner = `${dateLabel}${timeLabel}`;
+                    return `<span class="showing-chip">${s.ticket_url ? `<a href="${s.ticket_url}" target="_blank" rel="noopener">${inner}</a>` : inner}</span>`;
+                }).join('');
+
+                card.innerHTML = `
+          <div class="film-title-row">
+            <span class="film-title">
+              <a href="${film.film_url}" target="_blank" rel="noopener">${film.title}</a>
+            </span>
+            ${film.on_watchlist ? '<span class="badge-watchlist">★ Watchlist</span>' : ''}
+          </div>
+          <div class="film-meta">
+            ${film.director ? `<span>${film.director}</span>` : ''}
+            ${film.year ? `<span>${film.year}</span>` : ''}
+            ${film.runtime ? `<span>${film.runtime}</span>` : ''}
+            ${film.format ? `<span>${film.format}</span>` : ''}
+            ${ratingHtml}
+          </div>
+          <div class="showings-label">Showings</div>
+          <div class="showings-grid">${chipHtml}</div>
+        `;
+                list.appendChild(card);
+            });
+        }
+
+        async function runScraper() {
+            const btn = document.getElementById('scrape-btn');
+            const status = document.getElementById('scrape-status');
+            btn.disabled = true;
+            status.textContent = 'Scraping… this may take a minute.';
+            document.getElementById('error').style.display = 'none';
+
+            try {
+                const res = await fetch(`${API}/movies/scrape`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    status.textContent = '';
+                    showError(`Scrape failed: ${err.detail || res.status}`);
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('film-list').style.display = 'flex';
+                document.getElementById('updated-at').textContent = `Last updated: ${data.updated_at || 'unknown'}`;
+                allFilms = data.films || [];
+                // Reset date filter options
+                const sel = document.getElementById('date-filter');
+                sel.innerHTML = '<option value="">All dates</option>';
+                populateDateFilter();
+                renderFilms();
+                status.textContent = `✓ Updated — ${allFilms.length} films found.`;
+            } catch (e) {
+                status.textContent = '';
+                showError('Could not reach the server.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        loadSchedule();
+    </script>
+
+</body>
+
+</html>
