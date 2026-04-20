@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Not Found</title>
+    <link rel="icon" type="image/x-icon" href="forrest.ico">
+
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #4a9eff;
+            --border-color: #333;
+            --highlight-color: #1e1e1e;
+            --muted-color: #888;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 640px;
+            background: var(--highlight-color);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .kicker {
+            color: var(--muted-color);
+            font-size: 0.9rem;
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, var(--accent-color), #6c5ce7);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: #aaa;
+            line-height: 1.6;
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .home-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4em;
+            color: var(--text-color);
+            text-decoration: none;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.8rem 1.1rem;
+            transition: 0.2s ease;
+        }
+
+        .home-link:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        @media (max-width: 600px) {
+            .card {
+                padding: 1.5rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="card">
+        <div class="kicker">404</div>
+        <h1>Page Not Found</h1>
+        <p>The page you requested does not exist or has not been deployed yet.</p>
+        <a href="/" class="home-link">← Return to Home</a>
+    </main>
+</body>
+
+</html>

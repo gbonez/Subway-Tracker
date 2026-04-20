@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 # Import modules
 from models import get_db
 from utils.helpers import get_app_port
+from controllers.movie_controller import get_schedule, run_scraper
 from controllers.ride_controller import (
     get_root,
     debug_url_parsing,
@@ -89,6 +90,10 @@ def register_routes(app: FastAPI):
     app.get("/stats/transfer-stops")(get_transfer_stops_stats)
     app.get("/stats/popular-lines")(get_popular_lines_stats)
     
+    # Movie / Metrograph routes
+    app.get("/movies/schedule")(get_schedule)
+    app.post("/movies/scrape")(run_scraper)
+
     # Utility routes
     app.post("/add-test-data")(add_test_data)
 
