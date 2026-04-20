@@ -203,6 +203,16 @@
             white-space: nowrap;
         }
 
+        .badge-special-event {
+            font-size: 0.75rem;
+            background: rgba(232, 72, 85, 0.16);
+            color: #ff8a92;
+            border: 1px solid rgba(232, 72, 85, 0.38);
+            border-radius: 4px;
+            padding: 0.15em 0.5em;
+            white-space: nowrap;
+        }
+
         .badge-friends {
             font-size: 0.75rem;
             background: rgba(76, 175, 80, 0.15);
@@ -211,6 +221,24 @@
             border-radius: 4px;
             padding: 0.15em 0.5em;
             white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, transform 0.2s;
+        }
+
+        button.badge-friends {
+            appearance: none;
+            font-family: inherit;
+        }
+
+        .badge-friends:hover {
+            background: rgba(76, 175, 80, 0.22);
+            border-color: rgba(126, 220, 134, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .badge-friends:focus-visible {
+            outline: 2px solid rgba(126, 220, 134, 0.6);
+            outline-offset: 2px;
         }
 
         .film-meta {
@@ -287,6 +315,150 @@
             color: #ff6b6b;
         }
 
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(6, 9, 7, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            z-index: 1000;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal-window {
+            width: min(560px, 100%);
+            max-height: 85vh;
+            overflow-y: auto;
+            background: #181818;
+            border: 1px solid #2d4732;
+            border-radius: 16px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+            padding: 1.15rem 1.15rem 1.25rem;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .modal-kicker {
+            font-size: 0.74rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #7edc86;
+            margin-bottom: 0.4rem;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .modal-subtitle {
+            margin-top: 0.35rem;
+            color: #92a394;
+            font-size: 0.9rem;
+        }
+
+        .modal-close {
+            appearance: none;
+            border: 1px solid #3d3d3d;
+            background: #242424;
+            color: #b7b7b7;
+            border-radius: 999px;
+            width: 2rem;
+            height: 2rem;
+            font-size: 1rem;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+
+        .modal-close:hover {
+            background: #2e2e2e;
+            color: #fff;
+        }
+
+        .ratings-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .ratings-summary-card {
+            background: #202020;
+            border: 1px solid #2d2d2d;
+            border-radius: 10px;
+            padding: 0.8rem 0.9rem;
+        }
+
+        .ratings-summary-label {
+            font-size: 0.72rem;
+            color: #8c8c8c;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.35rem;
+        }
+
+        .ratings-summary-value {
+            font-size: 1.15rem;
+            color: var(--text-color);
+            font-weight: 600;
+        }
+
+        .ratings-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+
+        .rating-row {
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr) 32px;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .rating-label,
+        .rating-count {
+            font-size: 0.82rem;
+            color: #c6c6c6;
+        }
+
+        .rating-bar-track {
+            height: 1.1rem;
+            background: #232323;
+            border: 1px solid #2f2f2f;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .rating-bar-fill {
+            height: 100%;
+            min-width: 0;
+            background: linear-gradient(90deg, #65c36f 0%, #98e19b 100%);
+            border-radius: 999px;
+            transition: width 0.25s ease;
+        }
+
+        .ratings-empty {
+            padding: 1rem;
+            border: 1px dashed #355138;
+            border-radius: 12px;
+            color: #9ab39d;
+            text-align: center;
+            background: rgba(76, 175, 80, 0.08);
+        }
+
         @media (max-width: 600px) {
             h1 {
                 font-size: 1.75rem;
@@ -294,6 +466,15 @@
 
             .film-card {
                 padding: 1rem;
+            }
+
+            .modal-window {
+                padding: 1rem;
+            }
+
+            .rating-row {
+                grid-template-columns: 34px minmax(0, 1fr) 28px;
+                gap: 0.55rem;
             }
         }
     </style>
@@ -337,6 +518,22 @@
     <div id="error" style="display:none;"></div>
     <div id="film-list" style="display:none;"></div>
 
+    <div id="ratings-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-window" role="dialog" aria-modal="true" aria-labelledby="ratings-modal-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-kicker">Friend Rating Breakdown</div>
+                    <div id="ratings-modal-title" class="modal-title"></div>
+                    <div id="ratings-modal-subtitle" class="modal-subtitle"></div>
+                </div>
+                <button id="ratings-modal-close" class="modal-close" type="button"
+                    aria-label="Close rating breakdown">×</button>
+            </div>
+            <div id="ratings-modal-summary" class="ratings-summary"></div>
+            <div id="ratings-modal-chart" class="ratings-chart"></div>
+        </div>
+    </div>
+
     <script>
         function getApiBase() {
             const isLocalStaticPage = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
@@ -355,6 +552,89 @@
 
         const API = getApiBase();
         let allFilms = [];
+        const ratingSteps = Array.from({ length: 10 }, (_, index) => (index + 1) * 0.5);
+
+        const ratingsModal = document.getElementById('ratings-modal');
+        const ratingsModalTitle = document.getElementById('ratings-modal-title');
+        const ratingsModalSubtitle = document.getElementById('ratings-modal-subtitle');
+        const ratingsModalSummary = document.getElementById('ratings-modal-summary');
+        const ratingsModalChart = document.getElementById('ratings-modal-chart');
+
+        function formatRatingLabel(value) {
+            return value.toFixed(1);
+        }
+
+        function buildRatingDistribution(friendWatchers) {
+            const counts = new Map(ratingSteps.map(step => [step, 0]));
+            const numericRatings = (friendWatchers || []).filter(watcher => watcher && watcher.rating != null);
+
+            numericRatings.forEach(watcher => {
+                const roundedRating = Math.round(watcher.rating * 2) / 2;
+                if (counts.has(roundedRating)) {
+                    counts.set(roundedRating, counts.get(roundedRating) + 1);
+                }
+            });
+
+            return {
+                numericRatings,
+                counts: ratingSteps.map(step => ({
+                    label: formatRatingLabel(step),
+                    value: step,
+                    count: counts.get(step) || 0,
+                })),
+            };
+        }
+
+        function openFriendRatingsModal(film) {
+            const friendWatchers = Array.isArray(film.friend_watchers) ? film.friend_watchers : [];
+            const { numericRatings, counts } = buildRatingDistribution(friendWatchers);
+            const maxCount = Math.max(...counts.map(item => item.count), 0);
+            const averageLabel = film.friend_avg_rating != null ? `★ ${film.friend_avg_rating.toFixed(2)}` : 'No average';
+
+            ratingsModalTitle.textContent = film.title;
+            ratingsModalSubtitle.textContent = `${numericRatings.length} numeric ratings from ${film.friend_watch_count || 0} friends watched`;
+            ratingsModalSummary.innerHTML = `
+                <div class="ratings-summary-card">
+                    <div class="ratings-summary-label">Friends Watched</div>
+                    <div class="ratings-summary-value">${film.friend_watch_count || 0}</div>
+                </div>
+                <div class="ratings-summary-card">
+                    <div class="ratings-summary-label">Numeric Ratings</div>
+                    <div class="ratings-summary-value">${numericRatings.length}</div>
+                </div>
+                <div class="ratings-summary-card">
+                    <div class="ratings-summary-label">Friend Average</div>
+                    <div class="ratings-summary-value">${averageLabel}</div>
+                </div>
+            `;
+
+            if (!numericRatings.length) {
+                ratingsModalChart.innerHTML = '<div class="ratings-empty">No numeric friend ratings are stored for this movie yet.</div>';
+            } else {
+                ratingsModalChart.innerHTML = counts.map(item => {
+                    const width = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                    return `
+                        <div class="rating-row">
+                            <div class="rating-label">${item.label}</div>
+                            <div class="rating-bar-track">
+                                <div class="rating-bar-fill" style="width:${width}%;"></div>
+                            </div>
+                            <div class="rating-count">${item.count}</div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            ratingsModal.classList.add('open');
+            ratingsModal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeFriendRatingsModal() {
+            ratingsModal.classList.remove('open');
+            ratingsModal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        }
 
         function getSortValue(value, fallback = -1) {
             return value == null ? fallback : value;
@@ -500,8 +780,12 @@
                     ? `<span class="friend-rating">Friend rating ★ ${film.friend_avg_rating.toFixed(2)}</span>`
                     : '';
 
+                const specialEventBadgeHtml = film.special_event
+                    ? `<span class="badge-special-event" title="${(film.special_event_reason || 'Likely a special event').replace(/"/g, '&quot;')}">Special Event</span>`
+                    : '';
+
                 const friendsBadgeHtml = film.friend_watch_count > 0
-                    ? `<span class="badge-friends"># of Friends watched: ${film.friend_watch_count}</span>`
+                    ? `<button type="button" class="badge-friends"># of Friends watched: ${film.friend_watch_count}</button>`
                     : '';
 
                 const chipHtml = showings.map(s => {
@@ -517,8 +801,9 @@
               <a href="${film.film_url}" target="_blank" rel="noopener">${film.title}</a>
             </span>
             ${film.on_watchlist ? '<span class="badge-watchlist">★ Watchlist</span>' : ''}
-                        ${film.watched ? '<span class="badge-watched">Seen</span>' : ''}
-                        ${friendsBadgeHtml}
+            ${film.watched ? '<span class="badge-watched">Seen</span>' : ''}
+            ${specialEventBadgeHtml}
+            ${friendsBadgeHtml}
           </div>
           <div class="film-meta">
             ${film.director ? `<span>${film.director}</span>` : ''}
@@ -532,6 +817,10 @@
           <div class="showings-label">Showings</div>
           <div class="showings-grid">${chipHtml}</div>
         `;
+                const friendsBadge = card.querySelector('.badge-friends');
+                if (friendsBadge) {
+                    friendsBadge.addEventListener('click', () => openFriendRatingsModal(film));
+                }
                 list.appendChild(card);
             });
         }
@@ -594,6 +883,18 @@
                 btn.disabled = false;
             }
         }
+
+        document.getElementById('ratings-modal-close').addEventListener('click', closeFriendRatingsModal);
+        ratingsModal.addEventListener('click', (event) => {
+            if (event.target === ratingsModal) {
+                closeFriendRatingsModal();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && ratingsModal.classList.contains('open')) {
+                closeFriendRatingsModal();
+            }
+        });
 
         loadSchedule();
     </script>

@@ -36,6 +36,22 @@ HEADERS = {
     )
 }
 
+SPECIAL_EVENT_TITLE_PATTERNS = [
+    (re.compile(r"\bq\s*&\s*a\b|\bq and a\b", re.IGNORECASE), "Q&A event"),
+    (re.compile(r"\binterview\b|\bconversation\b|\bdiscussion\b|\btalk\b|\bmasterclass\b", re.IGNORECASE), "Interview or discussion event"),
+    (re.compile(r"\bin person\b|\bwith special guest\b|\bguest\b", re.IGNORECASE), "Guest appearance event"),
+    (re.compile(r"\bpresented by\b|\bhosted by\b|\bintroduced by\b|\bintro by\b", re.IGNORECASE), "Presented or introduced screening"),
+    (re.compile(r"\blive score\b|\blive accompaniment\b|\blive performance\b", re.IGNORECASE), "Live performance screening"),
+]
+
+SPECIAL_EVENT_DESCRIPTION_PATTERNS = [
+    (re.compile(r"\bcast member\b|\bactor in person\b|\bactress in person\b", re.IGNORECASE), "Cast member appearance"),
+    (re.compile(r"\bdirector in person\b|\bfilmmaker in person\b|\bwriter in person\b", re.IGNORECASE), "Filmmaker appearance"),
+    (re.compile(r"\bpost-screening\b|\bafter the screening\b|\bfollowed by\b.*\b(q\s*&\s*a|discussion|conversation|interview)\b", re.IGNORECASE), "Post-screening event"),
+    (re.compile(r"\bmoderated by\b|\bjoined by\b|\bfeaturing\b", re.IGNORECASE), "Hosted guest event"),
+    (re.compile(r"\blive music\b|\baccompaniment\b", re.IGNORECASE), "Live accompaniment event"),
+]
+
 
 def _log(message: str) -> None:
     print(message, flush=True)
@@ -406,6 +422,61 @@ def _serialize_friend_rows(friend_rows: list[MovieFriendRating]) -> list[dict]:
     ]
 
 
+def _apply_entry_to_film(film: dict, entry: Optional[MovieLetterboxdData]) -> None:
+    if entry is None:
+        film["on_watchlist"] = False
+        film["letterboxd_rating"] = None
+        film["watched"] = False
+        film["personal_rating"] = None
+        film["friend_watch_count"] = 0
+        film["friend_avg_rating"] = None
+        film["friend_watchers"] = []
+        return
+
+    rated_friend_values = [friend.rating for friend in entry.friend_ratings if friend.rating is not None]
+    film["on_watchlist"] = entry.on_watchlist
+    film["letterboxd_rating"] = entry.letterboxd_rating
+    film["watched"] = entry.watched
+    film["personal_rating"] = entry.personal_rating
+    film["friend_watch_count"] = len(entry.friend_ratings)
+    film["friend_avg_rating"] = round(sum(rated_friend_values) / len(rated_friend_values), 2) if rated_friend_values else None
+    film["friend_watchers"] = _serialize_friend_rows(entry.friend_ratings)
+
+
+def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdData]) -> list[str]:
+    reasons = []
+    title = showing.get("title") or ""
+    description = showing.get("description") or ""
+
+    for pattern, reason in SPECIAL_EVENT_TITLE_PATTERNS:
+        if pattern.search(title):
+            reasons.append(reason)
+
+    for pattern, reason in SPECIAL_EVENT_DESCRIPTION_PATTERNS:
+        if pattern.search(description):
+            reasons.append(reason)
+
+    if entry is not None:
+        has_letterboxd_signals = any(
+            [
+                entry.letterboxd_rating is not None,
+                entry.on_watchlist,
+                entry.watched,
+                entry.personal_rating is not None,
+                bool(entry.friend_ratings),
+            ]
+        )
+        if not has_letterboxd_signals:
+            reasons.append("No Letterboxd match found")
+
+    deduped_reasons = []
+    for reason in reasons:
+        if reason not in deduped_reasons:
+            deduped_reasons.append(reason)
+
+    return deduped_reasons
+
+
 def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
     entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).all()
     entries_by_key = {(entry.normalized_title, entry.year): entry for entry in entries}
@@ -426,25 +497,46 @@ def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
                 entry = next((candidate for candidate in matching_entries if candidate.year is None), None)
 
         if entry is None:
-            showing["on_watchlist"] = False
-            showing["letterboxd_rating"] = None
-            showing["watched"] = False
-            showing["personal_rating"] = None
-            showing["friend_watch_count"] = 0
-            showing["friend_avg_rating"] = None
-            showing["friend_watchers"] = []
+            _apply_entry_to_film(showing, None)
+            special_event_reasons = _get_special_event_reasons(showing, None)
+            showing["special_event"] = bool(special_event_reasons)
+            showing["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
             continue
 
-        rated_friend_values = [friend.rating for friend in entry.friend_ratings if friend.rating is not None]
-        showing["on_watchlist"] = entry.on_watchlist
-        showing["letterboxd_rating"] = entry.letterboxd_rating
-        showing["watched"] = entry.watched
-        showing["personal_rating"] = entry.personal_rating
-        showing["friend_watch_count"] = len(entry.friend_ratings)
-        showing["friend_avg_rating"] = round(sum(rated_friend_values) / len(rated_friend_values), 2) if rated_friend_values else None
-        showing["friend_watchers"] = _serialize_friend_rows(entry.friend_ratings)
+        _apply_entry_to_film(showing, entry)
+        special_event_reasons = _get_special_event_reasons(showing, entry)
+        showing["special_event"] = bool(special_event_reasons)
+        showing["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
 
     return showings
+
+
+def merge_schedule_payload_with_db(payload: dict, db: Session) -> dict:
+    films = payload.get("films", [])
+    entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).all()
+    entries_by_key = {(entry.normalized_title, entry.year): entry for entry in entries}
+    entries_by_title = defaultdict(list)
+    for entry in entries:
+        entries_by_title[entry.normalized_title].append(entry)
+
+    for film in films:
+        normalized_title = _norm(film.get("title", ""))
+        year = film.get("year")
+
+        entry = entries_by_key.get((normalized_title, year))
+        if entry is None:
+            matching_entries = entries_by_title.get(normalized_title, [])
+            if len(matching_entries) == 1:
+                entry = matching_entries[0]
+            else:
+                entry = next((candidate for candidate in matching_entries if candidate.year is None), None)
+
+        _apply_entry_to_film(film, entry)
+        special_event_reasons = _get_special_event_reasons(film, entry)
+        film["special_event"] = bool(special_event_reasons)
+        film["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
+
+    return payload
 
 
 def group_by_film(showings: list[dict]) -> list[dict]:
@@ -467,6 +559,8 @@ def group_by_film(showings: list[dict]) -> list[dict]:
                 "friend_watch_count": showing.get("friend_watch_count", 0),
                 "friend_avg_rating": showing.get("friend_avg_rating"),
                 "friend_watchers": showing.get("friend_watchers", []),
+                "special_event": showing.get("special_event", False),
+                "special_event_reason": showing.get("special_event_reason"),
                 "showings": [],
             }
         films[key]["showings"].append(
