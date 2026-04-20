@@ -450,18 +450,25 @@ def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
             _log(f"    Public rating fetched: {film_ratings[key]}")
             time.sleep(0.3)
 
+    watchlist_keys = {film_key for film_key in film_ratings if _norm(film_key[0]) in watchlist}
     top_public_rated_keys = {
         film_key
         for film_key, _ in sorted(
-            ((film_key, rating) for film_key, rating in film_ratings.items() if rating is not None),
+            (
+                (film_key, rating)
+                for film_key, rating in film_ratings.items()
+                if rating is not None and film_key not in watchlist_keys
+            ),
             key=lambda item: item[1],
             reverse=True,
         )[:10]
     }
-    watchlist_keys = {film_key for film_key in film_ratings if _norm(film_key[0]) in watchlist}
     targeted_keys = watchlist_keys | top_public_rated_keys
 
-    _log(f"  Targeted films for personal/friend checks: {len(targeted_keys)}")
+    _log(
+        "  Targeted films for personal/friend checks: "
+        f"{len(targeted_keys)} ({len(watchlist_keys)} watchlist, {len(top_public_rated_keys)} top public non-watchlist)"
+    )
 
     for film_index, (title, year) in enumerate(unique_films, start=1):
         key = (title, year)

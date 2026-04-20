@@ -227,6 +227,11 @@
             font-weight: 500;
         }
 
+        .friend-rating {
+            color: #7edc86;
+            font-weight: 500;
+        }
+
         .showings-label {
             font-size: 0.78rem;
             text-transform: uppercase;
@@ -480,8 +485,12 @@
                     ? `<span class="personal-rating">Your rating ★ ${film.personal_rating.toFixed(1)}</span>`
                     : '';
 
+                const friendRatingHtml = film.friend_avg_rating != null
+                    ? `<span class="friend-rating">Friend rating ★ ${film.friend_avg_rating.toFixed(2)}</span>`
+                    : '';
+
                 const friendsBadgeHtml = film.friend_watch_count > 0
-                    ? `<span class="badge-friends">Friends ${film.friend_watch_count}${film.friend_avg_rating != null ? ` · ★ ${film.friend_avg_rating.toFixed(2)}` : ''}</span>`
+                    ? `<span class="badge-friends"># of Friends watched: ${film.friend_watch_count}</span>`
                     : '';
 
                 const chipHtml = showings.map(s => {
@@ -506,7 +515,8 @@
             ${film.runtime ? `<span>${film.runtime}</span>` : ''}
             ${film.format ? `<span>${film.format}</span>` : ''}
             ${ratingHtml}
-                        ${personalRatingHtml}
+            ${personalRatingHtml}
+            ${friendRatingHtml}
           </div>
           <div class="showings-label">Showings</div>
           <div class="showings-grid">${chipHtml}</div>
