@@ -12,9 +12,9 @@ import json
 import os
 import re
 import time
+import unicodedata
 from datetime import date
 from typing import Optional
-from urllib.parse import quote
 
 import requests
 from bs4 import BeautifulSoup
@@ -24,8 +24,9 @@ from bs4 import BeautifulSoup
 # ---------------------------------------------------------------------------
 SCHEDULE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "metrograph_schedule.json")
 LETTERBOXD_USERNAME = "gbonez100"
-ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "false").lower() == "true"
+ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "true").lower() == "true"
 METROGRAPH_CALENDAR_URL = "https://metrograph.com/nyc/"
+LETTERBOXD_BASE_URL = "https://letterboxd.com"
 
 HEADERS = {
     "User-Agent": (
@@ -160,8 +161,8 @@ def scrape_schedule() -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _fetch_letterboxd_watchlist(username: str) -> set[str]:
-    """Return a set of normalised film titles on the user's Letterboxd watchlist."""
-    watchlist_titles: set[str] = set()
+    """Return a map of normalised watchlist film titles to their public Letterboxd links."""
+    watchlist_titles: dict[str, str] = {}
     page = 1
     while True:
         url = f"https://letterboxd.com/{username}/watchlist/page/{page}/"
@@ -175,14 +176,16 @@ def _fetch_letterboxd_watchlist(username: str) -> set[str]:
             break
 
         soup = BeautifulSoup(resp.text, "html.parser")
-        # Each film entry: <li class="poster-container"> with data-film-slug or <span class="frame-title">
-        films = soup.select("li.poster-container")
+        films = soup.select("li.griditem div.react-component[data-component-class='LazyPoster']")
         if not films:
             break
-        for li in films:
-            img = li.find("img", alt=True)
-            if img:
-                watchlist_titles.add(_norm(img["alt"]))
+        for film in films:
+            item_name = film.get("data-item-name", "")
+            item_link = film.get("data-item-link", "")
+            if not item_name or not item_link:
+                continue
+            clean_name = re.sub(r"\s*\(\d{4}\)$", "", item_name).strip()
+            watchlist_titles[_norm(clean_name)] = item_link
         # Check if there's a next page
         if not soup.select_one("a.next"):
             break
@@ -192,37 +195,89 @@ def _fetch_letterboxd_watchlist(username: str) -> set[str]:
     return watchlist_titles
 
 
-def _fetch_letterboxd_ratings(title: str, year: Optional[int]) -> Optional[float]:
-    """Fetch the public average rating for a film from Letterboxd."""
-    # Letterboxd film pages are at /film/<slug>/ — slug is derived from title
-    # Search is more reliable
-    query = f"{title} {year}" if year else title
-    search_url = f"https://letterboxd.com/search/films/{quote(query)}/"
-    try:
-        resp = requests.get(search_url, headers=HEADERS, timeout=15)
-        resp.raise_for_status()
-    except requests.RequestException:
-        return None
+def _slugify_title(title: str) -> str:
+    """Convert a movie title into a likely Letterboxd slug."""
+    normalized = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode("ascii")
+    normalized = re.sub(r"\[[^\]]*\]|\([^\)]*\)", " ", normalized)
+    normalized = normalized.replace("&", " and ")
+    normalized = normalized.replace("'", "")
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-")
+    return re.sub(r"-+", "-", normalized)
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    # The first result's rating is in <span class="average-rating"><a ...>X.XX</a></span>
-    first_result = soup.select_one("li.search-result")
-    if not first_result:
-        return None
 
-    # Validate title match roughly
-    result_title_el = first_result.select_one("span.film-title-wrapper a") or first_result.select_one("h2.name a")
-    if result_title_el:
-        result_title = _norm(result_title_el.get_text(strip=True))
-        if result_title and _norm(title) not in result_title and result_title not in _norm(title):
-            return None
+def _extract_rating_from_film_page(soup: BeautifulSoup) -> Optional[float]:
+    """Extract Letterboxd public average rating from a film page soup."""
+    meta_rating = soup.select_one('meta[name="twitter:data2"]')
+    if meta_rating:
+        match = re.search(r"([0-9]+(?:\.[0-9]+)?)", meta_rating.get("content", ""))
+        if match:
+            return float(match.group(1))
 
-    rating_el = first_result.select_one("span.average-rating a") or first_result.select_one(".average-rating")
-    if rating_el:
+    scripts = soup.select('script[type="application/ld+json"]')
+    for script in scripts:
+        text = script.get_text(strip=True)
+        match = re.search(r'"ratingValue"\s*:\s*([0-9]+(?:\.[0-9]+)?)', text)
+        if match:
+            return float(match.group(1))
+
+    return None
+
+
+def _validate_film_match(soup: BeautifulSoup, title: str, year: Optional[int]) -> bool:
+    """Check that a fetched Letterboxd film page matches the intended movie."""
+    og_title = soup.select_one('meta[property="og:title"]')
+    if not og_title:
+        return False
+
+    page_title = og_title.get("content", "")
+    page_title_norm = _norm(re.sub(r"\s*\(\d{4}\)$", "", page_title))
+    title_norm = _norm(re.sub(r"\[[^\]]*\]|\([^\)]*\)", " ", title))
+
+    if page_title_norm != title_norm:
+        return False
+
+    if year is not None:
+        year_match = re.search(r"\((\d{4})\)$", page_title)
+        if year_match and int(year_match.group(1)) != year:
+            return False
+
+    return True
+
+
+def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optional[str] = None) -> Optional[float]:
+    """Fetch the public average rating for a film from its Letterboxd page."""
+    candidate_paths = []
+
+    if film_path:
+        candidate_paths.append(film_path)
+
+    slug = _slugify_title(title)
+    if slug:
+        candidate_paths.append(f"/film/{slug}/")
+
+    seen_paths = set()
+    for path in candidate_paths:
+        if path in seen_paths:
+            continue
+        seen_paths.add(path)
+
+        url = f"{LETTERBOXD_BASE_URL}{path}"
         try:
-            return float(rating_el.get_text(strip=True))
-        except ValueError:
-            pass
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            if resp.status_code != 200:
+                continue
+        except requests.RequestException:
+            continue
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        if not _validate_film_match(soup, title, year):
+            continue
+
+        rating = _extract_rating_from_film_page(soup)
+        if rating is not None:
+            return rating
+
     return None
 
 
@@ -251,7 +306,8 @@ def enrich_with_letterboxd(showings: list[dict]) -> list[dict]:
     for title, year in unique_films:
         key = (title, year)
         if key not in film_ratings:
-            film_ratings[key] = _fetch_letterboxd_ratings(title, year)
+            watchlist_path = watchlist.get(_norm(title))
+            film_ratings[key] = _fetch_letterboxd_rating(title, year, watchlist_path)
             time.sleep(0.3)
 
     for s in showings:
