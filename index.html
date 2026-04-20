@@ -33,11 +33,46 @@
       align-items: center;
       text-align: center;
       padding: 2rem;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(74, 158, 255, 0.18), transparent 28%),
+        radial-gradient(circle at 82% 18%, rgba(108, 92, 231, 0.16), transparent 24%),
+        linear-gradient(160deg, #101216 0%, #121620 42%, #161426 100%);
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: -10%;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(70px);
+      opacity: 0.55;
+    }
+
+    body::before {
+      background:
+        radial-gradient(circle at 18% 32%, rgba(74, 158, 255, 0.28), transparent 24%),
+        radial-gradient(circle at 68% 70%, rgba(108, 92, 231, 0.22), transparent 26%),
+        radial-gradient(circle at 38% 82%, rgba(74, 158, 255, 0.1), transparent 18%);
+      animation: driftOne 18s ease-in-out infinite alternate;
+    }
+
+    body::after {
+      background:
+        radial-gradient(circle at 78% 24%, rgba(74, 158, 255, 0.14), transparent 20%),
+        radial-gradient(circle at 30% 62%, rgba(108, 92, 231, 0.24), transparent 22%),
+        radial-gradient(circle at 84% 84%, rgba(74, 158, 255, 0.12), transparent 18%);
+      animation: driftTwo 22s ease-in-out infinite alternate;
     }
 
     .container {
       max-width: 640px;
       width: 100%;
+      position: relative;
+      z-index: 1;
     }
 
     h1 {
@@ -62,7 +97,8 @@
     }
 
     .section-card {
-      background-color: var(--highlight-color);
+      background: rgba(30, 30, 30, 0.7);
+      backdrop-filter: blur(8px);
       border: 1px solid var(--border-color);
       border-radius: 12px;
       padding: 2rem;
@@ -75,7 +111,7 @@
     .section-card:hover {
       transform: translateY(-2px);
       border-color: var(--accent-color);
-      box-shadow: 0 8px 25px rgba(74, 158, 255, 0.1);
+      box-shadow: 0 12px 30px rgba(74, 158, 255, 0.12);
     }
 
     .section-icon {
@@ -101,6 +137,26 @@
       font-size: 0.9rem;
     }
 
+    @keyframes driftOne {
+      from {
+        transform: translate3d(-2%, -1%, 0) scale(1);
+      }
+
+      to {
+        transform: translate3d(3%, 2%, 0) scale(1.06);
+      }
+    }
+
+    @keyframes driftTwo {
+      from {
+        transform: translate3d(2%, -2%, 0) scale(1);
+      }
+
+      to {
+        transform: translate3d(-3%, 3%, 0) scale(1.08);
+      }
+    }
+
     @media (max-width: 600px) {
       h1 {
         font-size: 2.5rem;
@@ -123,7 +179,7 @@
     <h1>gbonez.org</h1>
 
     <p class="subtitle">
-      Building useful tools and exploring things I care about.
+      Tools just for me to use :)
     </p>
 
     <div class="sections">
@@ -132,8 +188,15 @@
         <div class="section-icon">🚇</div>
         <div class="section-title">Subway</div>
         <p class="section-description">
-          Track subway rides across New York City. Record trips, import Google Maps routes,
-          and explore personal transit stats.
+          Tracking my personal subway usage.
+        </p>
+      </a>
+
+      <a href="movies/" class="section-card">
+        <div class="section-icon">🎬</div>
+        <div class="section-title">Movies</div>
+        <p class="section-description">
+          Metrograph showtimes linked to my Letterboxd.
         </p>
       </a>
 
@@ -153,18 +216,10 @@
         </p>
       </a>
 
-      <a href="movies/" class="section-card">
-        <div class="section-icon">🎬</div>
-        <div class="section-title">Movies</div>
-        <p class="section-description">
-          Upcoming Metrograph showtimes, sorted by your Letterboxd watchlist and ratings.
-        </p>
-      </a>
-
     </div>
 
     <div class="footer">
-      <p>Built with ❤️ by gbonez</p>
+      <p>Made with ❤️</p>
     </div>
 
   </div>
