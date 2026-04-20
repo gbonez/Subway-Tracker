@@ -36,6 +36,9 @@ HEADERS = {
     )
 }
 
+IMDB_SUGGESTION_BASE_URL = "https://v2.sg.media-imdb.com/suggestion"
+IMDB_MATCH_CACHE: dict[tuple[str, Optional[int]], Optional[dict]] = {}
+
 SPECIAL_EVENT_TITLE_PATTERNS = [
     (re.compile(r"\bq\s*&\s*a\b|\bq and a\b", re.IGNORECASE), "Q&A event"),
     (re.compile(r"\binterview\b|\bconversation\b|\bdiscussion\b|\btalk\b|\bmasterclass\b", re.IGNORECASE), "Interview or discussion event"),
@@ -100,6 +103,101 @@ def _generate_slug_candidates(title: str, year: Optional[int]) -> list[str]:
                 candidates.append(path)
 
     return candidates
+
+
+def _clean_title_for_external_search(title: str) -> str:
+    cleaned = re.sub(r"\[[^\]]*\]|\([^\)]*\)", " ", title)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _strip_trailing_byline(title: str) -> str:
+    return re.sub(r"\s*\((?:by|presented by|introduced by|intro by)\s+[^\)]+\)\s*$", "", title, flags=re.IGNORECASE).strip()
+
+
+def _parse_title_context(title: str) -> dict:
+    base_title = _strip_trailing_byline(title)
+    components: list[dict] = []
+    structural_reasons: list[str] = []
+
+    preceded_by_parts = [part.strip() for part in re.split(r"\s+preceded by\s+", base_title, maxsplit=1, flags=re.IGNORECASE) if part.strip()]
+    if len(preceded_by_parts) == 2:
+        components = [{"title": part, "search_title": _clean_title_for_external_search(part)} for part in preceded_by_parts]
+        structural_reasons.append("Double feature")
+        return {"components": components, "structural_reasons": structural_reasons}
+
+    plus_parts = [part.strip() for part in re.split(r"\s+\+\s+", base_title) if part.strip()]
+    if len(plus_parts) > 1:
+        components = [{"title": part, "search_title": _clean_title_for_external_search(part)} for part in plus_parts]
+        structural_reasons.append("Double feature")
+        return {"components": components, "structural_reasons": structural_reasons}
+
+    presenter_match = re.match(r"^.+?\s+(?:presents|presented by|introduces|introduced)\s+(.+)$", base_title, flags=re.IGNORECASE)
+    if presenter_match:
+        presented_title = presenter_match.group(1).strip()
+        components = [{"title": presented_title, "search_title": _clean_title_for_external_search(presented_title)}]
+        structural_reasons.append("Presented screening")
+        return {"components": components, "structural_reasons": structural_reasons}
+
+    components = [{"title": base_title, "search_title": _clean_title_for_external_search(base_title)}]
+    return {"components": components, "structural_reasons": structural_reasons}
+
+
+def _fetch_imdb_movie_match(title: str, year: Optional[int]) -> Optional[dict]:
+    cache_key = (title, year)
+    if cache_key in IMDB_MATCH_CACHE:
+        return IMDB_MATCH_CACHE[cache_key]
+
+    cleaned_title = _clean_title_for_external_search(title)
+    search_query = re.sub(r"\s+", "-", cleaned_title.lower())
+    first_char = next((char for char in search_query if char.isalnum()), "t")
+    url = f"{IMDB_SUGGESTION_BASE_URL}/{first_char}/{requests.utils.quote(search_query)}.json"
+
+    try:
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        IMDB_MATCH_CACHE[cache_key] = None
+        return None
+
+    title_norm = _norm(cleaned_title)
+    best_match = None
+    best_score = 0.0
+
+    for candidate in payload.get("d", []):
+        qid = (candidate.get("qid") or "").lower()
+        q = (candidate.get("q") or "").lower()
+        if qid not in {"movie", "feature"} and q not in {"feature", "movie"}:
+            continue
+
+        candidate_title = candidate.get("l") or ""
+        candidate_year = candidate.get("y")
+        candidate_norm = _norm(candidate_title)
+        similarity = SequenceMatcher(None, title_norm, candidate_norm).ratio()
+        if similarity < 0.72:
+            continue
+
+        score = similarity
+        if year is not None and candidate_year is not None:
+            year_delta = abs(candidate_year - year)
+            if year_delta == 0:
+                score += 0.35
+            elif year_delta == 1:
+                score += 0.15
+            elif year_delta > 2:
+                continue
+
+        if score > best_score:
+            best_score = score
+            best_match = {
+                "title": candidate_title,
+                "year": candidate_year,
+                "id": candidate.get("id"),
+            }
+
+    IMDB_MATCH_CACHE[cache_key] = best_match
+    return best_match
 
 
 def fetch_calendar_page() -> BeautifulSoup:
@@ -374,6 +472,28 @@ def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optiona
         if rating is not None:
             return rating
 
+    imdb_match = _fetch_imdb_movie_match(title, year)
+    if imdb_match and imdb_match["title"] != title:
+        for path in _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year):
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+
+            try:
+                resp = requests.get(f"{LETTERBOXD_BASE_URL}{path}", headers=HEADERS, timeout=15)
+                if resp.status_code != 200:
+                    continue
+            except requests.RequestException:
+                continue
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            if not _validate_film_match(soup, imdb_match["title"], imdb_match.get("year") or year):
+                continue
+
+            rating = _extract_rating_from_film_page(soup)
+            if rating is not None:
+                return rating
+
     return None
 
 
@@ -394,6 +514,24 @@ def _fetch_member_film_data(username: str, title: str, year: Optional[int]) -> d
         personal_rating = _extract_star_rating(rating_meta.get("content", "") if rating_meta else "")
         return {"watched": True, "personal_rating": personal_rating}
 
+    imdb_match = _fetch_imdb_movie_match(title, year)
+    if imdb_match and imdb_match["title"] != title:
+        for path in _generate_slug_candidates(imdb_match["title"], imdb_match.get("year") or year):
+            try:
+                resp = requests.get(f"{LETTERBOXD_BASE_URL}/{username}{path}", headers=HEADERS, timeout=15)
+                if resp.status_code != 200:
+                    continue
+            except requests.RequestException:
+                continue
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            if not _validate_member_film_match(soup, imdb_match["title"], imdb_match.get("year") or year):
+                continue
+
+            rating_meta = soup.select_one('meta[name="twitter:data2"]')
+            personal_rating = _extract_star_rating(rating_meta.get("content", "") if rating_meta else "")
+            return {"watched": True, "personal_rating": personal_rating}
+
     return {"watched": False, "personal_rating": None}
 
 
@@ -411,6 +549,24 @@ def _find_movie_entry(db: Session, normalized_title: str, year: Optional[int]) -
     return query.filter(MovieLetterboxdData.year.is_(None)).first()
 
 
+def _find_movie_entry_from_lookups(
+    search_title: str,
+    year: Optional[int],
+    entries_by_key: dict,
+    entries_by_title: defaultdict,
+) -> Optional[MovieLetterboxdData]:
+    normalized_title = _norm(search_title)
+    entry = entries_by_key.get((normalized_title, year))
+    if entry is not None:
+        return entry
+
+    matching_entries = entries_by_title.get(normalized_title, [])
+    if len(matching_entries) == 1:
+        return matching_entries[0]
+
+    return next((candidate for candidate in matching_entries if candidate.year is None), None)
+
+
 def _serialize_friend_rows(friend_rows: list[MovieFriendRating]) -> list[dict]:
     return [
         {
@@ -420,6 +576,32 @@ def _serialize_friend_rows(friend_rows: list[MovieFriendRating]) -> list[dict]:
         }
         for row in sorted(friend_rows, key=lambda row: (row.friend_display_name or row.friend_username or "").lower())
     ]
+
+
+def _entry_has_letterboxd_signals(entry: Optional[MovieLetterboxdData]) -> bool:
+    if entry is None:
+        return False
+
+    return any(
+        [
+            entry.letterboxd_rating is not None,
+            entry.on_watchlist,
+            entry.watched,
+            entry.personal_rating is not None,
+            bool(entry.friend_ratings),
+        ]
+    )
+
+
+def _build_component_payload(component: dict, year: Optional[int], entry: Optional[MovieLetterboxdData]) -> dict:
+    payload = {
+        "title": component["title"],
+        "search_title": component["search_title"],
+        "year": year,
+    }
+    _apply_entry_to_film(payload, entry)
+    payload["has_external_match"] = _entry_has_letterboxd_signals(entry) or _fetch_imdb_movie_match(component["search_title"], year) is not None
+    return payload
 
 
 def _apply_entry_to_film(film: dict, entry: Optional[MovieLetterboxdData]) -> None:
@@ -443,10 +625,59 @@ def _apply_entry_to_film(film: dict, entry: Optional[MovieLetterboxdData]) -> No
     film["friend_watchers"] = _serialize_friend_rows(entry.friend_ratings)
 
 
+def _apply_components_to_film(film: dict, component_payloads: list[dict]) -> None:
+    film["rating_components"] = [
+        {
+            "title": component["title"],
+            "search_title": component["search_title"],
+            "letterboxd_rating": component.get("letterboxd_rating"),
+            "on_watchlist": component.get("on_watchlist", False),
+            "watched": component.get("watched", False),
+            "personal_rating": component.get("personal_rating"),
+            "friend_watch_count": component.get("friend_watch_count", 0),
+            "friend_avg_rating": component.get("friend_avg_rating"),
+            "friend_watchers": component.get("friend_watchers", []),
+        }
+        for component in component_payloads
+    ]
+
+    if not component_payloads:
+        _apply_entry_to_film(film, None)
+        return
+
+    public_ratings = [component["letterboxd_rating"] for component in component_payloads if component.get("letterboxd_rating") is not None]
+    personal_ratings = [component["personal_rating"] for component in component_payloads if component.get("personal_rating") is not None]
+    friend_counts = [component.get("friend_watch_count", 0) for component in component_payloads]
+    friend_avgs = [component["friend_avg_rating"] for component in component_payloads if component.get("friend_avg_rating") is not None]
+
+    best_component = max(
+        component_payloads,
+        key=lambda component: (
+            1 if component.get("on_watchlist") else 0,
+            component.get("friend_watch_count", 0),
+            component.get("friend_avg_rating") if component.get("friend_avg_rating") is not None else -1,
+            component.get("letterboxd_rating") if component.get("letterboxd_rating") is not None else -1,
+            component.get("watched", False),
+        ),
+    )
+
+    film["on_watchlist"] = any(component.get("on_watchlist") for component in component_payloads)
+    film["watched"] = any(component.get("watched") for component in component_payloads)
+    film["personal_rating"] = max(personal_ratings) if personal_ratings else None
+    film["friend_watch_count"] = max(friend_counts) if friend_counts else 0
+    film["friend_avg_rating"] = max(friend_avgs) if friend_avgs else None
+    film["letterboxd_rating"] = max(public_ratings) if public_ratings else None
+    film["friend_watchers"] = best_component.get("friend_watchers", [])
+
+
 def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdData]) -> list[str]:
     reasons = []
     title = showing.get("title") or ""
     description = showing.get("description") or ""
+    title_context = _parse_title_context(title)
+
+    for reason in title_context["structural_reasons"]:
+        reasons.append(reason)
 
     for pattern, reason in SPECIAL_EVENT_TITLE_PATTERNS:
         if pattern.search(title):
@@ -456,18 +687,15 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
         if pattern.search(description):
             reasons.append(reason)
 
-    if entry is not None:
-        has_letterboxd_signals = any(
-            [
-                entry.letterboxd_rating is not None,
-                entry.on_watchlist,
-                entry.watched,
-                entry.personal_rating is not None,
-                bool(entry.friend_ratings),
-            ]
-        )
-        if not has_letterboxd_signals:
-            reasons.append("No Letterboxd match found")
+    has_letterboxd_signals = _entry_has_letterboxd_signals(entry)
+    has_component_match = False
+    for component in title_context["components"]:
+        if _fetch_imdb_movie_match(component["search_title"], showing.get("year")) is not None:
+            has_component_match = True
+            break
+
+    if not has_letterboxd_signals and not has_component_match:
+            reasons.append("No Letterboxd or IMDb movie match found")
 
     deduped_reasons = []
     for reason in reasons:
@@ -475,6 +703,20 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
             deduped_reasons.append(reason)
 
     return deduped_reasons
+
+
+def _enrich_film_from_components(film: dict, entries_by_key: dict, entries_by_title: defaultdict) -> None:
+    title_context = _parse_title_context(film.get("title", ""))
+    component_payloads = []
+
+    for component in title_context["components"]:
+        entry = _find_movie_entry_from_lookups(component["search_title"], film.get("year"), entries_by_key, entries_by_title)
+        component_payloads.append(_build_component_payload(component, film.get("year"), entry))
+
+    _apply_components_to_film(film, component_payloads)
+    special_event_reasons = _get_special_event_reasons(film, None)
+    film["special_event"] = bool(special_event_reasons)
+    film["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
 
 
 def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
@@ -485,28 +727,7 @@ def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
         entries_by_title[entry.normalized_title].append(entry)
 
     for showing in showings:
-        normalized_title = _norm(showing["title"])
-        year = showing.get("year")
-
-        entry = entries_by_key.get((normalized_title, year))
-        if entry is None:
-            matching_entries = entries_by_title.get(normalized_title, [])
-            if len(matching_entries) == 1:
-                entry = matching_entries[0]
-            else:
-                entry = next((candidate for candidate in matching_entries if candidate.year is None), None)
-
-        if entry is None:
-            _apply_entry_to_film(showing, None)
-            special_event_reasons = _get_special_event_reasons(showing, None)
-            showing["special_event"] = bool(special_event_reasons)
-            showing["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
-            continue
-
-        _apply_entry_to_film(showing, entry)
-        special_event_reasons = _get_special_event_reasons(showing, entry)
-        showing["special_event"] = bool(special_event_reasons)
-        showing["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
+        _enrich_film_from_components(showing, entries_by_key, entries_by_title)
 
     return showings
 
@@ -520,21 +741,7 @@ def merge_schedule_payload_with_db(payload: dict, db: Session) -> dict:
         entries_by_title[entry.normalized_title].append(entry)
 
     for film in films:
-        normalized_title = _norm(film.get("title", ""))
-        year = film.get("year")
-
-        entry = entries_by_key.get((normalized_title, year))
-        if entry is None:
-            matching_entries = entries_by_title.get(normalized_title, [])
-            if len(matching_entries) == 1:
-                entry = matching_entries[0]
-            else:
-                entry = next((candidate for candidate in matching_entries if candidate.year is None), None)
-
-        _apply_entry_to_film(film, entry)
-        special_event_reasons = _get_special_event_reasons(film, entry)
-        film["special_event"] = bool(special_event_reasons)
-        film["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
+        _enrich_film_from_components(film, entries_by_key, entries_by_title)
 
     return payload
 
@@ -559,6 +766,7 @@ def group_by_film(showings: list[dict]) -> list[dict]:
                 "friend_watch_count": showing.get("friend_watch_count", 0),
                 "friend_avg_rating": showing.get("friend_avg_rating"),
                 "friend_watchers": showing.get("friend_watchers", []),
+                "rating_components": showing.get("rating_components", []),
                 "special_event": showing.get("special_event", False),
                 "special_event_reason": showing.get("special_event_reason"),
                 "showings": [],
@@ -626,58 +834,68 @@ def update_letterboxd_table(db: Session) -> dict:
     friend_profiles = _load_friend_profiles()
     _log(f"  Loaded {len(friend_profiles)} friend profiles.")
 
+    processed_components = set()
     updated_movies = 0
     for index, (title, year) in enumerate(unique_films, start=1):
-        normalized_title = _norm(title)
         _log(f"  [{index}/{len(unique_films)}] Syncing {title} ({year or 'unknown'})")
 
-        watchlist_path = watchlist.get(normalized_title)
-        public_rating = _fetch_letterboxd_rating(title, year, watchlist_path)
-        personal = _fetch_member_film_data(LETTERBOXD_USERNAME, title, year)
-
-        entry = _find_movie_entry(db, normalized_title, year)
-        if entry is None:
-            entry = MovieLetterboxdData(
-                title=title,
-                normalized_title=normalized_title,
-                year=year,
-            )
-            db.add(entry)
-            db.flush()
-
-        entry.title = title
-        entry.normalized_title = normalized_title
-        entry.year = year
-        entry.letterboxd_rating = public_rating
-        entry.on_watchlist = normalized_title in watchlist
-        entry.watched = personal["watched"]
-        entry.personal_rating = personal["personal_rating"]
-        entry.last_scanned_at = datetime.now(timezone.utc)
-
-        entry.friend_ratings.clear()
-        db.flush()
-
-        for friend_index, profile in enumerate(friend_profiles, start=1):
-            info = _fetch_member_film_data(profile["username"], title, year)
-            _log(
-                f"    Friend {friend_index}/{len(friend_profiles)} {profile['username']}: watched={info['watched']} rating={info['personal_rating']}"
-            )
-            if not info["watched"]:
-                time.sleep(0.15)
+        title_context = _parse_title_context(title)
+        for component in title_context["components"]:
+            normalized_title = _norm(component["search_title"])
+            component_key = (normalized_title, year)
+            if component_key in processed_components:
                 continue
 
-            entry.friend_ratings.append(
-                MovieFriendRating(
-                    friend_username=profile["username"],
-                    friend_display_name=profile.get("display_name"),
-                    rating=info["personal_rating"],
-                )
-            )
-            time.sleep(0.15)
+            processed_components.add(component_key)
+            _log(f"    Component sync: {component['title']}")
 
-        updated_movies += 1
-        db.commit()
-        time.sleep(0.25)
+            watchlist_path = watchlist.get(normalized_title)
+            public_rating = _fetch_letterboxd_rating(component["search_title"], year, watchlist_path)
+            personal = _fetch_member_film_data(LETTERBOXD_USERNAME, component["search_title"], year)
+
+            entry = _find_movie_entry(db, normalized_title, year)
+            if entry is None:
+                entry = MovieLetterboxdData(
+                    title=component["title"],
+                    normalized_title=normalized_title,
+                    year=year,
+                )
+                db.add(entry)
+                db.flush()
+
+            entry.title = component["title"]
+            entry.normalized_title = normalized_title
+            entry.year = year
+            entry.letterboxd_rating = public_rating
+            entry.on_watchlist = normalized_title in watchlist
+            entry.watched = personal["watched"]
+            entry.personal_rating = personal["personal_rating"]
+            entry.last_scanned_at = datetime.now(timezone.utc)
+
+            entry.friend_ratings.clear()
+            db.flush()
+
+            for friend_index, profile in enumerate(friend_profiles, start=1):
+                info = _fetch_member_film_data(profile["username"], component["search_title"], year)
+                _log(
+                    f"    Friend {friend_index}/{len(friend_profiles)} {profile['username']}: watched={info['watched']} rating={info['personal_rating']}"
+                )
+                if not info["watched"]:
+                    time.sleep(0.15)
+                    continue
+
+                entry.friend_ratings.append(
+                    MovieFriendRating(
+                        friend_username=profile["username"],
+                        friend_display_name=profile.get("display_name"),
+                        rating=info["personal_rating"],
+                    )
+                )
+                time.sleep(0.15)
+
+            updated_movies += 1
+            db.commit()
+            time.sleep(0.25)
 
     return {
         "enabled": True,

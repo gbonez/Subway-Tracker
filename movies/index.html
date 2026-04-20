@@ -266,6 +266,42 @@
             font-weight: 500;
         }
 
+        .component-ratings {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .component-rating-row {
+            background: #202020;
+            border: 1px solid #303030;
+            border-radius: 10px;
+            padding: 0.65rem 0.8rem;
+        }
+
+        .component-rating-title-row {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.3rem;
+        }
+
+        .component-rating-title {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #dddddd;
+        }
+
+        .component-rating-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            font-size: 0.8rem;
+            color: #8a8a8a;
+        }
+
         .showings-label {
             font-size: 0.78rem;
             text-transform: uppercase;
@@ -507,6 +543,7 @@
         <select id="sort-by" onchange="renderFilms()">
             <option value="default">Default</option>
             <option value="soonest">Soonest date</option>
+            <option value="special_event">Special events</option>
             <option value="friend_avg">Highest avg friend rating</option>
             <option value="friend_count">Highest friend watch count</option>
             <option value="public_rating">Highest public rating</option>
@@ -577,7 +614,7 @@
 
             return {
                 numericRatings,
-                counts: ratingSteps.map(step => ({
+                counts: [...ratingSteps].reverse().map(step => ({
                     label: formatRatingLabel(step),
                     value: step,
                     count: counts.get(step) || 0,
@@ -645,6 +682,30 @@
             return timestamps.length ? Math.min(...timestamps) : Number.POSITIVE_INFINITY;
         }
 
+        function getFilmBestRating(film) {
+            const componentRatings = Array.isArray(film.rating_components)
+                ? film.rating_components.map(component => component.letterboxd_rating).filter(rating => rating != null)
+                : [];
+
+            if (componentRatings.length) {
+                return Math.max(...componentRatings);
+            }
+
+            if (film.letterboxd_rating != null) {
+                return film.letterboxd_rating;
+            }
+
+            if (film.friend_avg_rating != null) {
+                return film.friend_avg_rating;
+            }
+
+            if (film.personal_rating != null) {
+                return film.personal_rating;
+            }
+
+            return -1;
+        }
+
         function sortFilms(films, sortBy) {
             const sorted = [...films];
 
@@ -669,11 +730,28 @@
                     return getSortValue(b.personal_rating) - getSortValue(a.personal_rating) || a.title.localeCompare(b.title);
                 }
 
+                if (sortBy === 'special_event') {
+                    const specialEventOrder = (b.special_event === a.special_event) ? 0 : (b.special_event ? 1 : -1);
+                    if (specialEventOrder !== 0) return specialEventOrder;
+
+                    return getFilmBestRating(b) - getFilmBestRating(a)
+                        || getSortValue(b.friend_watch_count) - getSortValue(a.friend_watch_count)
+                        || a.title.localeCompare(b.title);
+                }
+
+                const watchlistSpecialOrder = ((b.on_watchlist && b.special_event) === (a.on_watchlist && a.special_event))
+                    ? 0
+                    : ((b.on_watchlist && b.special_event) ? 1 : -1);
+                if (watchlistSpecialOrder !== 0) return watchlistSpecialOrder;
+
                 const watchlistOrder = (a.on_watchlist === b.on_watchlist) ? 0 : (a.on_watchlist ? -1 : 1);
                 if (watchlistOrder !== 0) return watchlistOrder;
 
                 const friendCountOrder = getSortValue(b.friend_watch_count) - getSortValue(a.friend_watch_count);
                 if (friendCountOrder !== 0) return friendCountOrder;
+
+                const specialEventOrder = (b.special_event === a.special_event) ? 0 : (b.special_event ? 1 : -1);
+                if (specialEventOrder !== 0) return specialEventOrder;
 
                 const friendAvgOrder = getSortValue(b.friend_avg_rating) - getSortValue(a.friend_avg_rating);
                 if (friendAvgOrder !== 0) return friendAvgOrder;
@@ -735,6 +813,15 @@
             return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function renderFilms() {
             const query = document.getElementById('search').value.toLowerCase();
             const watchlistOnly = document.getElementById('watchlist-only').checked;
@@ -764,6 +851,9 @@
                 const showings = dateFilter
                     ? film.showings.filter(s => s.date === dateFilter)
                     : film.showings;
+                const ratingComponents = Array.isArray(film.rating_components) ? film.rating_components : [];
+                const showComponentRatings = ratingComponents.length > 1
+                    || (ratingComponents.length === 1 && ratingComponents[0].title && ratingComponents[0].title !== film.title);
 
                 const card = document.createElement('div');
                 card.className = 'film-card' + (film.on_watchlist ? ' watchlist' : '');
@@ -784,8 +874,40 @@
                     ? `<span class="badge-special-event" title="${(film.special_event_reason || 'Likely a special event').replace(/"/g, '&quot;')}">Special Event</span>`
                     : '';
 
-                const friendsBadgeHtml = film.friend_watch_count > 0
+                const friendsBadgeHtml = !showComponentRatings && film.friend_watch_count > 0
                     ? `<button type="button" class="badge-friends"># of Friends watched: ${film.friend_watch_count}</button>`
+                    : '';
+
+                const componentRatingsHtml = showComponentRatings
+                    ? `<div class="component-ratings">${ratingComponents.map((component, index) => {
+                        const componentPublicRatingHtml = component.letterboxd_rating != null
+                            ? `<span class="rating">★ ${component.letterboxd_rating.toFixed(1)}</span>`
+                            : '';
+                        const componentPersonalRatingHtml = component.personal_rating != null
+                            ? `<span class="personal-rating">Your rating ★ ${component.personal_rating.toFixed(1)}</span>`
+                            : '';
+                        const componentFriendRatingHtml = component.friend_avg_rating != null
+                            ? `<span class="friend-rating">Friend rating ★ ${component.friend_avg_rating.toFixed(2)}</span>`
+                            : '';
+                        const componentFriendsBadgeHtml = component.friend_watch_count > 0
+                            ? `<button type="button" class="badge-friends" data-component-index="${index}"># of Friends watched: ${component.friend_watch_count}</button>`
+                            : '';
+                        return `
+                            <div class="component-rating-row">
+                                <div class="component-rating-title-row">
+                                    <span class="component-rating-title">${escapeHtml(component.title)}</span>
+                                    ${component.on_watchlist ? '<span class="badge-watchlist">★ Watchlist</span>' : ''}
+                                    ${component.watched ? '<span class="badge-watched">Seen</span>' : ''}
+                                    ${componentFriendsBadgeHtml}
+                                </div>
+                                <div class="component-rating-meta">
+                                    ${componentPublicRatingHtml}
+                                    ${componentPersonalRatingHtml}
+                                    ${componentFriendRatingHtml}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}</div>`
                     : '';
 
                 const chipHtml = showings.map(s => {
@@ -810,17 +932,19 @@
             ${film.year ? `<span>${film.year}</span>` : ''}
             ${film.runtime ? `<span>${film.runtime}</span>` : ''}
             ${film.format ? `<span>${film.format}</span>` : ''}
-            ${ratingHtml}
-            ${personalRatingHtml}
-            ${friendRatingHtml}
+                        ${showComponentRatings ? '' : ratingHtml}
+                        ${showComponentRatings ? '' : personalRatingHtml}
+                        ${showComponentRatings ? '' : friendRatingHtml}
           </div>
+                    ${componentRatingsHtml}
           <div class="showings-label">Showings</div>
           <div class="showings-grid">${chipHtml}</div>
         `;
-                const friendsBadge = card.querySelector('.badge-friends');
-                if (friendsBadge) {
-                    friendsBadge.addEventListener('click', () => openFriendRatingsModal(film));
-                }
+                card.querySelectorAll('.badge-friends').forEach(button => {
+                    const componentIndex = button.getAttribute('data-component-index');
+                    const modalTarget = componentIndex != null ? ratingComponents[Number(componentIndex)] : film;
+                    button.addEventListener('click', () => openFriendRatingsModal(modalTarget));
+                });
                 list.appendChild(card);
             });
         }
