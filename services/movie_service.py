@@ -15,9 +15,9 @@ import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session, selectinload
 
-from models import MovieFriendRating, MovieLetterboxdData
+from models import MovieFriendRating, MovieLetterboxdData, MovieScheduleSnapshot
 
-SCHEDULE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "metrograph_schedule.json")
+SCHEDULE_SNAPSHOT_KEY = "metrograph_schedule"
 LETTERBOXD_FRIENDS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "letterboxd_friends.json")
 LETTERBOXD_USERNAME = "gbonez100"
 ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "true").lower() == "true"
@@ -973,17 +973,36 @@ def build_schedule_payload(db: Session) -> dict:
     _log("📋 Grouping by film...")
     films = group_by_film(showings)
     return {
-        "updated_at": date.today().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "films": films,
     }
 
 
-def write_schedule_payload(payload: dict) -> str:
-    out_path = os.path.abspath(SCHEDULE_PATH)
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
-    return out_path
+def get_stored_schedule_payload(db: Session, snapshot_key: str = SCHEDULE_SNAPSHOT_KEY) -> Optional[dict]:
+    snapshot = db.query(MovieScheduleSnapshot).filter(MovieScheduleSnapshot.snapshot_key == snapshot_key).first()
+    if snapshot is None:
+        return None
+    return snapshot.payload
+
+
+def store_schedule_payload(db: Session, payload: dict, snapshot_key: str = SCHEDULE_SNAPSHOT_KEY) -> dict:
+    snapshot = db.query(MovieScheduleSnapshot).filter(MovieScheduleSnapshot.snapshot_key == snapshot_key).first()
+    stored_payload = dict(payload)
+    stored_payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    if snapshot is None:
+        snapshot = MovieScheduleSnapshot(
+            snapshot_key=snapshot_key,
+            payload=stored_payload,
+            updated_at=datetime.now(timezone.utc),
+        )
+        db.add(snapshot)
+    else:
+        snapshot.payload = stored_payload
+        snapshot.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    return stored_payload
 
 
 def update_letterboxd_table(db: Session) -> dict:

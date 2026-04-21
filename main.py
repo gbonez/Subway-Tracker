@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from models import get_db, init_db
 from utils.helpers import get_app_port
 from controllers.movie_controller import get_schedule, run_letterboxd_scan, run_scraper
+from services.movie_scheduler import ensure_schedule_snapshot, start_movie_scheduler, stop_movie_scheduler
 from controllers.ride_controller import (
     get_root,
     debug_url_parsing,
@@ -63,6 +64,15 @@ def create_app() -> FastAPI:
     
     # Register routes
     register_routes(app)
+
+    @app.on_event("startup")
+    async def startup_movie_services():
+        ensure_schedule_snapshot()
+        start_movie_scheduler()
+
+    @app.on_event("shutdown")
+    async def shutdown_movie_services():
+        stop_movie_scheduler()
     
     return app
 

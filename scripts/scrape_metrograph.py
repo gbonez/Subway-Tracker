@@ -1,7 +1,7 @@
 """Fetch the Metrograph schedule and merge stored Letterboxd table data."""
 
 from models import SessionLocal, init_db
-from services.movie_service import build_schedule_payload, write_schedule_payload
+from services.movie_service import build_schedule_payload, store_schedule_payload
 
 
 def main():
@@ -9,8 +9,8 @@ def main():
     db = SessionLocal()
     try:
         payload = build_schedule_payload(db)
-        out_path = write_schedule_payload(payload)
-        print(f"✅ Wrote {len(payload['films'])} films to {out_path}")
+        stored_payload = store_schedule_payload(db, payload)
+        print(f"✅ Stored {len(stored_payload['films'])} films in the Metrograph schedule snapshot")
     finally:
         db.close()
 

@@ -2,7 +2,7 @@
 Database models and configuration for the NYC Subway Tracker
 """
 import os
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, create_engine
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
 
@@ -101,3 +101,12 @@ class MovieFriendRating(Base):
     rating = Column(Float, nullable=True)
 
     movie = relationship("MovieLetterboxdData", back_populates="friend_ratings")
+
+
+class MovieScheduleSnapshot(Base):
+    __tablename__ = "movie_schedule_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_key = Column(String, nullable=False, unique=True, index=True)
+    payload = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
