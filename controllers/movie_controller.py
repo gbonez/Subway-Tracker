@@ -9,17 +9,16 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from models import get_db
-from services.movie_service import SCHEDULE_PATH, build_schedule_payload, merge_schedule_payload_with_db, update_letterboxd_table, write_schedule_payload
+from services.movie_service import SCHEDULE_PATH, build_schedule_payload, update_letterboxd_table, write_schedule_payload
 
 
-async def get_schedule(db: Session = Depends(get_db)):
-    """Return the cached Metrograph schedule JSON merged with current DB-backed movie data."""
+async def get_schedule():
+    """Return the prepared cached Metrograph schedule JSON."""
     path = os.path.abspath(SCHEDULE_PATH)
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="Schedule not yet generated. Run the scraper first.")
     with open(path, "r") as f:
         data = json.load(f)
-    data = merge_schedule_payload_with_db(data, db)
     return JSONResponse(content=data)
 
 
@@ -38,6 +37,8 @@ async def run_letterboxd_scan(db: Session = Depends(get_db)):
     """Scan Letterboxd data for the current Metrograph slate and store it in the database."""
     try:
         payload = update_letterboxd_table(db)
+        schedule_payload = build_schedule_payload(db)
+        write_schedule_payload(schedule_payload)
     except Exception as error:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Letterboxd scan failed: {error}") from error
