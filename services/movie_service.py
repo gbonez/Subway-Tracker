@@ -38,7 +38,7 @@ HEADERS = {
 }
 
 IMDB_SUGGESTION_BASE_URL = "https://v2.sg.media-imdb.com/suggestion"
-IMDB_MATCH_CACHE: dict[tuple[str, Optional[int]], Optional[dict]] = {}
+IMDB_MATCH_CACHE: dict[tuple[str, Optional[int], Optional[str]], Optional[dict]] = {}
 IMDB_RATING_CACHE: dict[str, Optional[float]] = {}
 LETTERBOXD_SEARCH_CACHE: dict[tuple[str, Optional[int], Optional[str]], list[str]] = {}
 
@@ -147,60 +147,77 @@ def _parse_title_context(title: str) -> dict:
     return {"components": components, "structural_reasons": structural_reasons}
 
 
-def _fetch_imdb_movie_match(title: str, year: Optional[int]) -> Optional[dict]:
-    cache_key = (title, year)
+def _fetch_imdb_movie_match(title: str, year: Optional[int], director: Optional[str] = None) -> Optional[dict]:
+    cache_key = (title, year, director)
     if cache_key in IMDB_MATCH_CACHE:
         return IMDB_MATCH_CACHE[cache_key]
 
     cleaned_title = _clean_title_for_external_search(title)
-    search_query = re.sub(r"\s+", "-", cleaned_title.lower())
-    first_char = next((char for char in search_query if char.isalnum()), "t")
-    url = f"{IMDB_SUGGESTION_BASE_URL}/{first_char}/{requests.utils.quote(search_query)}.json"
-
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=15)
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
-        IMDB_MATCH_CACHE[cache_key] = None
-        return None
-
     title_norm = _norm(cleaned_title)
+    director_norm = _norm((director or "").split(",")[0]) if director else ""
+    queries = [cleaned_title]
+    if director:
+        queries.append(f"{cleaned_title} {director}")
+    if year is not None:
+        queries.append(f"{cleaned_title} {year}")
+
     best_match = None
-    best_score = 0.0
+    best_score = float("-inf")
 
-    for candidate in payload.get("d", []):
-        qid = (candidate.get("qid") or "").lower()
-        q = (candidate.get("q") or "").lower()
-        if qid not in {"movie", "feature"} and q not in {"feature", "movie"}:
+    for query in queries:
+        search_query = re.sub(r"\s+", "-", query.lower())
+        first_char = next((char for char in search_query if char.isalnum()), "t")
+        url = f"{IMDB_SUGGESTION_BASE_URL}/{first_char}/{requests.utils.quote(search_query)}.json"
+
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=15)
+            response.raise_for_status()
+            payload = response.json()
+        except (requests.RequestException, ValueError):
             continue
 
-        candidate_title = candidate.get("l") or ""
-        candidate_year = candidate.get("y")
-        candidate_norm = _norm(candidate_title)
-        similarity = SequenceMatcher(None, title_norm, candidate_norm).ratio()
-        if similarity < 0.72:
-            continue
+        for candidate in payload.get("d", []):
+            qid = (candidate.get("qid") or "").lower()
+            q = (candidate.get("q") or "").lower()
+            if qid not in {"movie", "feature"} and q not in {"feature", "movie"}:
+                continue
 
-        score = similarity
-        if year is not None and candidate_year is not None:
-            year_delta = abs(candidate_year - year)
-            if year_delta == 0:
+            candidate_title = candidate.get("l") or ""
+            candidate_year = candidate.get("y")
+            candidate_norm = _norm(candidate_title)
+            similarity = SequenceMatcher(None, title_norm, candidate_norm).ratio()
+            score = similarity
+
+            if year is not None and candidate_year is not None:
+                year_delta = abs(candidate_year - year)
+                if year_delta == 0:
+                    score += 0.45
+                elif year_delta == 1:
+                    score += 0.2
+                elif year_delta <= 5:
+                    score -= 0.05 * year_delta
+                else:
+                    score -= 0.35
+
+            cast_or_credit = _norm(candidate.get("s") or "")
+            if director_norm and director_norm and director_norm in cast_or_credit:
                 score += 0.35
-            elif year_delta == 1:
-                score += 0.15
-            elif year_delta <= 5:
-                score -= 0.08 * year_delta
-            else:
-                score -= 0.25
 
-        if score > best_score:
-            best_score = score
-            best_match = {
-                "title": candidate_title,
-                "year": candidate_year,
-                "id": candidate.get("id"),
-            }
+            if similarity < 0.72 and not (
+                year is not None
+                and candidate_year is not None
+                and abs(candidate_year - year) <= 1
+                and score >= 0.35
+            ):
+                continue
+
+            if score > best_score:
+                best_score = score
+                best_match = {
+                    "title": candidate_title,
+                    "year": candidate_year,
+                    "id": candidate.get("id"),
+                }
 
     IMDB_MATCH_CACHE[cache_key] = best_match
     return best_match
@@ -264,6 +281,20 @@ def _build_letterboxd_search_queries(title: str, year: Optional[int], director: 
             seen.add(key)
             deduped.append(candidate)
     return deduped
+
+
+def _has_external_movie_match(title: str, year: Optional[int], director: Optional[str] = None) -> bool:
+    if _search_letterboxd_film_paths(title, year, director):
+        return True
+    return _fetch_imdb_movie_match(title, year, director) is not None
+
+
+def _has_external_movie_match(title: str, year: Optional[int], director: Optional[str] = None) -> bool:
+    if _search_letterboxd_film_paths(title, year, director):
+        return True
+
+    imdb_match = _fetch_imdb_movie_match(title, year, director)
+    return imdb_match is not None
 
 
 def _search_letterboxd_film_paths(title: str, year: Optional[int] = None, director: Optional[str] = None) -> list[str]:
@@ -730,14 +761,14 @@ def _entry_has_letterboxd_signals(entry: Optional[MovieLetterboxdData]) -> bool:
     )
 
 
-def _build_component_payload(component: dict, year: Optional[int], entry: Optional[MovieLetterboxdData]) -> dict:
+def _build_component_payload(component: dict, year: Optional[int], director: Optional[str], entry: Optional[MovieLetterboxdData]) -> dict:
     payload = {
         "title": component["title"],
         "search_title": component["search_title"],
         "year": year,
     }
     _apply_entry_to_film(payload, entry)
-    payload["has_external_match"] = _entry_has_letterboxd_signals(entry) or _fetch_imdb_movie_match(component["search_title"], year) is not None
+    payload["has_external_match"] = _entry_has_letterboxd_signals(entry) or _has_external_movie_match(component["search_title"], year, director)
     return payload
 
 
@@ -811,6 +842,7 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
     reasons = []
     title = showing.get("title") or ""
     description = showing.get("description") or ""
+    director = showing.get("director")
     title_context = _parse_title_context(title)
 
     for reason in title_context["structural_reasons"]:
@@ -827,7 +859,7 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
     if not reasons:
         has_component_match = False
         for component in title_context["components"]:
-            if _fetch_imdb_movie_match(component["search_title"], showing.get("year")) is not None:
+            if _has_external_movie_match(component["search_title"], showing.get("year"), director):
                 has_component_match = True
                 break
         if not has_component_match:
@@ -844,10 +876,11 @@ def _get_special_event_reasons(showing: dict, entry: Optional[MovieLetterboxdDat
 def _enrich_film_from_components(film: dict, entries_by_key: dict, entries_by_title: defaultdict) -> None:
     title_context = _parse_title_context(film.get("title", ""))
     component_payloads = []
+    director = film.get("director")
 
     for component in title_context["components"]:
         entry = _find_movie_entry_from_lookups(component["search_title"], film.get("year"), entries_by_key, entries_by_title)
-        component_payloads.append(_build_component_payload(component, film.get("year"), entry))
+        component_payloads.append(_build_component_payload(component, film.get("year"), director, entry))
 
     _apply_components_to_film(film, component_payloads)
     special_event_reasons = _get_special_event_reasons(film, None)
