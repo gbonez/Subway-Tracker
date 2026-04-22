@@ -712,6 +712,22 @@
             return -1;
         }
 
+        function formatUpdatedAt(value) {
+            if (!value) {
+                return 'unknown';
+            }
+
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                return value;
+            }
+
+            const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(parsed.getUTCDate()).padStart(2, '0');
+            const year = parsed.getUTCFullYear();
+            return `${month}-${day}-${year}`;
+        }
+
         function sortFilms(films, sortBy) {
             const sorted = [...films];
 
@@ -785,7 +801,7 @@
                 const data = await res.json();
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('film-list').style.display = 'flex';
-                document.getElementById('updated-at').textContent = `Last updated: ${data.updated_at || 'unknown'}`;
+                document.getElementById('updated-at').textContent = `Last updated: ${formatUpdatedAt(data.updated_at)}`;
                 allFilms = data.films || [];
                 populateDateFilter();
                 renderFilms();
@@ -973,7 +989,7 @@
                 }
                 const data = await res.json();
                 document.getElementById('film-list').style.display = 'flex';
-                document.getElementById('updated-at').textContent = `Last updated: ${data.updated_at || 'unknown'}`;
+                document.getElementById('updated-at').textContent = `Last updated: ${formatUpdatedAt(data.updated_at)}`;
                 allFilms = data.films || [];
                 // Reset date filter options
                 const sel = document.getElementById('date-filter');
