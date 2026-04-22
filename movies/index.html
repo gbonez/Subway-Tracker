@@ -722,10 +722,12 @@
                 return value;
             }
 
-            const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(parsed.getUTCDate()).padStart(2, '0');
-            const year = parsed.getUTCFullYear();
-            return `${month}-${day}-${year}`;
+            return new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/New_York',
+                month: '2-digit',
+                day: '2-digit',
+                year: 'numeric',
+            }).format(parsed).replace(/\//g, '-');
         }
 
         function sortFilms(films, sortBy) {
