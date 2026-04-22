@@ -6,7 +6,7 @@ import re
 import time
 import unicodedata
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from urllib.parse import quote
 from typing import Optional
@@ -987,7 +987,7 @@ def get_stored_schedule_payload(db: Session, snapshot_key: str = SCHEDULE_SNAPSH
 
 def store_schedule_payload(db: Session, payload: dict, snapshot_key: str = SCHEDULE_SNAPSHOT_KEY) -> dict:
     snapshot = db.query(MovieScheduleSnapshot).filter(MovieScheduleSnapshot.snapshot_key == snapshot_key).first()
-    stored_payload = dict(payload)
+    stored_payload = json.loads(json.dumps(payload))
     stored_payload["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     if snapshot is None:
@@ -1005,12 +1005,70 @@ def store_schedule_payload(db: Session, payload: dict, snapshot_key: str = SCHED
     return stored_payload
 
 
+def _collect_new_watchlist_films(schedule_payload: dict, new_watchlist_entries: list[dict]) -> list[dict]:
+    if not new_watchlist_entries:
+        return []
+
+    new_entry_keys = {
+        (entry["normalized_title"], entry.get("year"))
+        for entry in new_watchlist_entries
+    }
+
+    matches = []
+    seen_titles = set()
+    for film in schedule_payload.get("films", []):
+        components = film.get("rating_components") or [
+            {
+                "search_title": film.get("title"),
+                "year": film.get("year"),
+                "on_watchlist": film.get("on_watchlist", False),
+            }
+        ]
+
+        if not any(
+            component.get("on_watchlist")
+            and (_norm(component.get("search_title") or ""), component.get("year", film.get("year"))) in new_entry_keys
+            for component in components
+        ):
+            continue
+
+        dedupe_key = (film.get("title"), film.get("director"))
+        if dedupe_key in seen_titles:
+            continue
+        seen_titles.add(dedupe_key)
+
+        matches.append(
+            {
+                "title": film.get("title"),
+                "director": film.get("director") or "Unknown Director",
+                "special_event": film.get("special_event", False),
+            }
+        )
+
+    return matches
+
+
+def run_movie_refresh_pipeline(db: Session) -> dict:
+    sync_result = update_letterboxd_table(db)
+    schedule_payload = build_schedule_payload(db)
+    stored_schedule = store_schedule_payload(db, schedule_payload)
+    new_watchlist_films = _collect_new_watchlist_films(
+        stored_schedule,
+        sync_result.get("new_watchlist_entries", []),
+    )
+
+    sync_result["schedule_updated_at"] = stored_schedule.get("updated_at")
+    sync_result["new_watchlist_films"] = new_watchlist_films
+    return sync_result
+
+
 def update_letterboxd_table(db: Session) -> dict:
     if not ENABLE_LETTERBOXD:
         return {
             "enabled": False,
             "message": "Letterboxd syncing is disabled by ENABLE_LETTERBOXD.",
             "updated_movies": 0,
+            "new_watchlist_entries": [],
         }
 
     _log("🎬 Scraping Metrograph titles for Letterboxd sync...")
@@ -1025,6 +1083,7 @@ def update_letterboxd_table(db: Session) -> dict:
 
     processed_components = set()
     updated_movies = 0
+    new_watchlist_entries = []
     for index, (title, year) in enumerate(unique_films, start=1):
         _log(f"  [{index}/{len(unique_films)}] Syncing {title} ({year or 'unknown'})")
 
@@ -1043,8 +1102,10 @@ def update_letterboxd_table(db: Session) -> dict:
             watchlist_path = watchlist.get(normalized_title)
             public_rating = _fetch_letterboxd_rating(component["search_title"], year, watchlist_path, director=film_director)
             personal = _fetch_member_film_data(LETTERBOXD_USERNAME, component["search_title"], year, director=film_director)
+            is_on_watchlist = normalized_title in watchlist
 
             entry = _find_movie_entry(db, normalized_title, year)
+            is_new_entry = entry is None
             if entry is None:
                 entry = MovieLetterboxdData(
                     title=component["title"],
@@ -1058,10 +1119,19 @@ def update_letterboxd_table(db: Session) -> dict:
             entry.normalized_title = normalized_title
             entry.year = year
             entry.letterboxd_rating = public_rating
-            entry.on_watchlist = normalized_title in watchlist
+            entry.on_watchlist = is_on_watchlist
             entry.watched = personal["watched"]
             entry.personal_rating = personal["personal_rating"]
             entry.last_scanned_at = datetime.now(timezone.utc)
+
+            if is_new_entry and is_on_watchlist:
+                new_watchlist_entries.append(
+                    {
+                        "title": component["title"],
+                        "normalized_title": normalized_title,
+                        "year": year,
+                    }
+                )
 
             entry.friend_ratings.clear()
             db.flush()
@@ -1093,5 +1163,6 @@ def update_letterboxd_table(db: Session) -> dict:
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_movies": updated_movies,
         "friend_profiles": len(friend_profiles),
+        "new_watchlist_entries": new_watchlist_entries,
         "message": f"Updated stored Letterboxd data for {updated_movies} Metrograph films.",
     }
