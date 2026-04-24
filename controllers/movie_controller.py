@@ -209,7 +209,9 @@ async def setup_movie_user(request: MovieUserSetupRequest, background_tasks: Bac
         )
     except ValueError as error:
         db.rollback()
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        detail = str(error)
+        status_code = 409 if "already exists" in detail.lower() else 400
+        raise HTTPException(status_code=status_code, detail=detail) from error
     except Exception as error:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Movie user setup failed: {error}") from error

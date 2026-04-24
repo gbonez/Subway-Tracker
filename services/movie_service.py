@@ -1546,7 +1546,7 @@ def build_movie_setup_welcome_message(username: str, watchlist_films: Optional[l
     return (
         "Hello! You have been signed up for gbonez's Automated Metrograph Calendar Services!\n\n"
         f"Your username is : {normalized_username}.\n\n"
-        f"Watchlist matches from this sync: {highlighted_titles}.\n\n"
+        f"Watchlist matches present on calendar after this run: {highlighted_titles}.\n\n"
         f"Please head to gbonez dot org slash movies slash {normalized_username} to see your data or to stop services. Thanks :)\n"
         f"(Will update this text to include the proper url when my phone number get verified lol sorry)"
     )
