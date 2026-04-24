@@ -18,6 +18,8 @@ from controllers.movie_controller import (
     login_movie_user,
     run_letterboxd_scan,
     run_scraper,
+    send_movie_custom_text,
+    send_movie_test_text,
     setup_movie_user,
     sync_movie_user,
     update_movie_user_letterboxd,
@@ -112,6 +114,8 @@ def register_routes(app: FastAPI):
     app.post("/movies/users/login")(login_movie_user)
     app.post("/movies/users/{username}/letterboxd-sync")(sync_movie_user)
     app.patch("/movies/users/{username}")(update_movie_user_letterboxd)
+    app.post("/movies/text/send")(send_movie_test_text)
+    app.post("/movies/text/send-custom")(send_movie_custom_text)
     app.post("/movies/scrape")(run_scraper)
     app.post("/movies/letterboxd-sync")(run_letterboxd_scan)
 

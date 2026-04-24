@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Text Test</title>
+    <style>
+        :root {
+            --bg: #f4ede1;
+            --card: rgba(255, 250, 242, 0.94);
+            --text: #1e1d1a;
+            --muted: #675f52;
+            --accent: #c4552d;
+            --accent-dark: #9f3f1c;
+            --border: rgba(30, 29, 26, 0.12);
+            --success: #21603a;
+            --error: #8b1e1e;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Georgia, "Times New Roman", serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(196, 85, 45, 0.18), transparent 36%),
+                linear-gradient(160deg, #efe2cd 0%, var(--bg) 45%, #e3d3bc 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .panel {
+            width: min(100%, 560px);
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 32px;
+            box-shadow: 0 28px 60px rgba(55, 36, 18, 0.18);
+        }
+
+        .section {
+            margin-top: 28px;
+            padding-top: 28px;
+            border-top: 1px solid var(--border);
+        }
+
+        .section h2 {
+            margin: 0 0 8px;
+            font-size: 1.5rem;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: clamp(2rem, 5vw, 2.8rem);
+            line-height: 1;
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .target {
+            margin-top: 22px;
+            padding: 16px 18px;
+            border-radius: 16px;
+            background: rgba(196, 85, 45, 0.08);
+            border: 1px solid rgba(196, 85, 45, 0.16);
+            font-size: 1rem;
+        }
+
+        .form-grid {
+            margin-top: 20px;
+            display: grid;
+            gap: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        input,
+        select,
+        textarea {
+            width: 100%;
+            border: 1px solid rgba(30, 29, 26, 0.15);
+            border-radius: 14px;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--text);
+            font: inherit;
+        }
+
+        textarea {
+            min-height: 132px;
+            resize: vertical;
+        }
+
+        .field-note {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        .send-btn {
+            margin-top: 24px;
+            width: 100%;
+            border: none;
+            border-radius: 999px;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+            color: #fff8f2;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+            box-shadow: 0 14px 28px rgba(159, 63, 28, 0.26);
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+        }
+
+        .send-btn:disabled {
+            cursor: wait;
+            opacity: 0.75;
+        }
+
+        .status {
+            display: none;
+            margin-top: 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .status.visible {
+            display: block;
+        }
+
+        .status.success {
+            background: rgba(33, 96, 58, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(33, 96, 58, 0.18);
+        }
+
+        .status.error {
+            background: rgba(139, 30, 30, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(139, 30, 30, 0.18);
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="panel">
+        <a href="/" class="back-link">← Return to Home</a>
+        <h1>Textbelt Test</h1>
+        <p>This sends a single test text through the backend using the configured Textbelt API key.</p>
+        <div class="target">Message: Hello<br>Phone: +15132268634</div>
+        <button class="send-btn" id="send-btn" type="button">Send Hello Text</button>
+        <div class="status" id="status"></div>
+
+        <section class="section">
+            <h2>Custom Send</h2>
+            <p>Send either a custom text you write or the same setup welcome message used when an account is created.
+            </p>
+            <div class="form-grid">
+                <div>
+                    <label for="recipient">Website Username or Phone Number</label>
+                    <input id="recipient" type="text" placeholder="grayson or +15132268634" autocomplete="off">
+                    <div class="field-note">If you enter a website username, the saved phone number for that movie user
+                        will be used.</div>
+                </div>
+
+                <div>
+                    <label for="message-kind">Message Type</label>
+                    <select id="message-kind">
+                        <option value="custom">Custom text</option>
+                        <option value="setup-welcome">Setup welcome text</option>
+                    </select>
+                </div>
+
+                <div id="custom-message-group">
+                    <label for="custom-message">Custom Message</label>
+                    <textarea id="custom-message" placeholder="Write the text you want to send."></textarea>
+                </div>
+
+                <div id="setup-username-group" class="hidden">
+                    <label for="setup-username">Website Username For Setup Text</label>
+                    <input id="setup-username" type="text" placeholder="Only needed when recipient is a phone number"
+                        autocomplete="off">
+                    <div class="field-note">Leave this blank when the recipient field is already a website username.
+                    </div>
+                </div>
+            </div>
+
+            <button class="send-btn" id="custom-send-btn" type="button">Send Message</button>
+            <div class="status" id="custom-status"></div>
+        </section>
+    </main>
+
+    <script>
+        const sendButton = document.getElementById('send-btn');
+        const statusBox = document.getElementById('status');
+        const customSendButton = document.getElementById('custom-send-btn');
+        const customStatusBox = document.getElementById('custom-status');
+        const recipientInput = document.getElementById('recipient');
+        const messageKindSelect = document.getElementById('message-kind');
+        const customMessageInput = document.getElementById('custom-message');
+        const customMessageGroup = document.getElementById('custom-message-group');
+        const setupUsernameGroup = document.getElementById('setup-username-group');
+        const setupUsernameInput = document.getElementById('setup-username');
+
+        function showStatus(target, kind, message) {
+            target.className = `status visible ${kind}`;
+            target.textContent = message;
+        }
+
+        function syncMessageFields() {
+            const isSetupMessage = messageKindSelect.value === 'setup-welcome';
+            customMessageGroup.classList.toggle('hidden', isSetupMessage);
+            setupUsernameGroup.classList.toggle('hidden', !isSetupMessage);
+        }
+
+        async function sendTestText() {
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            showStatus(statusBox, 'success', 'Sending text...');
+
+            try {
+                const response = await fetch('/movies/text/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Text request failed.');
+                }
+
+                const quotaText = payload.quotaRemaining !== undefined
+                    ? `\nQuota remaining: ${payload.quotaRemaining}`
+                    : '';
+                showStatus(statusBox, 'success', `Textbelt response: ${JSON.stringify(payload, null, 2)}${quotaText}`);
+            } catch (error) {
+                showStatus(statusBox, 'error', error.message || 'Unable to send text.');
+            } finally {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send Hello Text';
+            }
+        }
+
+        async function sendCustomText() {
+            customSendButton.disabled = true;
+            customSendButton.textContent = 'Sending...';
+            showStatus(customStatusBox, 'success', 'Sending text...');
+
+            try {
+                const response = await fetch('/movies/text/send-custom', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        recipient: recipientInput.value,
+                        message_kind: messageKindSelect.value,
+                        message_body: customMessageInput.value,
+                        setup_username: setupUsernameInput.value
+                    })
+                });
+                const payload = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(payload.detail || 'Text request failed.');
+                }
+
+                showStatus(customStatusBox, 'success', JSON.stringify(payload, null, 2));
+            } catch (error) {
+                showStatus(customStatusBox, 'error', error.message || 'Unable to send text.');
+            } finally {
+                customSendButton.disabled = false;
+                customSendButton.textContent = 'Send Message';
+            }
+        }
+
+        sendButton.addEventListener('click', sendTestText);
+        customSendButton.addEventListener('click', sendCustomText);
+        messageKindSelect.addEventListener('change', syncMessageFields);
+        syncMessageFields();
+    </script>
+</body>
+
+</html>

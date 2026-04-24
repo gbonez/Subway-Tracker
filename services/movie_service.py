@@ -1536,14 +1536,28 @@ def _send_movie_sync_sms(user: MovieUser, sync_result: dict) -> None:
         _log(f"  ⚠️  SMS notification failed for {user.username}: {error}")
 
 
-def _send_movie_setup_welcome_sms(user: MovieUser) -> None:
+def build_movie_setup_welcome_message(username: str, watchlist_films: Optional[list[dict]] = None) -> str:
+    normalized_username = normalize_app_username(username)
+    watchlist_titles = [film.get("title", "").strip() for film in (watchlist_films or []) if film.get("title")]
+    highlighted_titles = ", ".join(watchlist_titles[:5]) if watchlist_titles else "None"
+    if len(watchlist_titles) > 5:
+        highlighted_titles = f"{highlighted_titles}, +{len(watchlist_titles) - 5} more"
+
+    return (
+        "Hello! You have been signed up for gbonez's Automated Metrograph Calendar Services!\n\n"
+        f"Your username is : {normalized_username}.\n\n"
+        f"Watchlist matches from this sync: {highlighted_titles}.\n\n"
+        f"Please head to gbonez.org/movies/{normalized_username} to see your data or to stop services. Thanks :)"
+    )
+
+
+def _send_movie_setup_welcome_sms(user: MovieUser, sync_result: Optional[dict] = None) -> None:
     if not user.phone_number:
         return
 
-    message_body = (
-        "Hello! You have been signed up for gbonez's Automated Metrograph Calendar Services!\n\n"
-        f"Your username is : {user.username}.\n\n"
-        f"Please head to gbonez.org/movies/{user.username} to see your data or to stop services. Thanks :)"
+    message_body = build_movie_setup_welcome_message(
+        user.username,
+        sync_result.get("new_watchlist_films", []) if sync_result else None,
     )
 
     try:
@@ -1582,7 +1596,7 @@ def run_movie_refresh_pipeline(
         sync_result["user"] = _serialize_movie_user(active_user)
         if send_sms:
             if sms_mode == "setup-welcome":
-                _send_movie_setup_welcome_sms(active_user)
+                _send_movie_setup_welcome_sms(active_user, sync_result)
             else:
                 _send_movie_sync_sms(active_user, sync_result)
         if progress_callback is not None:

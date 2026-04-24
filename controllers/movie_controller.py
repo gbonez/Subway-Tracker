@@ -1,4 +1,4 @@
-"""Movie route controllers — Metrograph schedule and Letterboxd sync."""
+"""Movie route controllers — Metrograph schedule, Letterboxd sync, and SMS test tools."""
 
 from fastapi import BackgroundTasks, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from models import get_db
+from services.sms_utils import send_text_message
 from services.movie_service import (
+    build_movie_setup_welcome_message,
     build_schedule_payload,
     clear_movie_user_friend_data,
     create_movie_user,
@@ -17,6 +19,7 @@ from services.movie_service import (
     get_or_create_default_movie_user,
     get_schedule_payload_for_user,
     initialize_sync_job,
+    normalize_phone_number,
     run_movie_refresh_pipeline,
     run_movie_refresh_pipeline_for_username,
     set_movie_user_sync_state,
@@ -39,6 +42,83 @@ class MovieUserLoginRequest(BaseModel):
 class MovieUserProfileUpdateRequest(BaseModel):
     letterboxd_username: Optional[str] = None
     phone_number: Optional[str] = None
+
+
+class MovieTextSendRequest(BaseModel):
+    recipient: str
+    message_kind: str = "custom"
+    message_body: str = ""
+    setup_username: str = ""
+
+
+async def send_movie_test_text():
+    """Send a fixed test SMS through Textbelt for manual verification."""
+    try:
+        result = send_text_message("+15132268634", "Hello")
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Text message send failed: {error}") from error
+
+    return JSONResponse(content=result)
+
+
+async def send_movie_custom_text(request: MovieTextSendRequest, db: Session = Depends(get_db)):
+    """Send a custom or setup-welcome SMS to a saved movie user or a direct phone number."""
+    recipient_value = (request.recipient or "").strip()
+    if not recipient_value:
+        raise HTTPException(status_code=400, detail="Enter a website username or phone number.")
+
+    direct_phone_number = None
+    movie_user = get_movie_user(db, recipient_value)
+
+    if movie_user is not None:
+        if not movie_user.phone_number:
+            raise HTTPException(status_code=400, detail="That user does not have a saved phone number.")
+        destination_phone = movie_user.phone_number
+        resolved_username = movie_user.username
+    else:
+        try:
+            direct_phone_number = normalize_phone_number(recipient_value)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        destination_phone = direct_phone_number
+        resolved_username = ""
+
+    message_kind = (request.message_kind or "custom").strip().lower()
+    if message_kind == "setup-welcome":
+        setup_username = (request.setup_username or resolved_username or "").strip()
+        if not setup_username:
+            raise HTTPException(status_code=400, detail="Enter a website username for the setup welcome text.")
+        try:
+            message_body = build_movie_setup_welcome_message(setup_username)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+    elif message_kind == "custom":
+        message_body = (request.message_body or "").strip()
+        if not message_body:
+            raise HTTPException(status_code=400, detail="Custom text message cannot be empty.")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported message type.")
+
+    try:
+        result = send_text_message(destination_phone, message_body)
+    except ValueError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=f"Text message send failed: {error}") from error
+
+    response_payload = {
+        "recipient": recipient_value,
+        "resolved_phone_number": destination_phone,
+        "message_kind": message_kind,
+        "message_body": message_body,
+        "textbelt": result,
+    }
+    if movie_user is not None:
+        response_payload["resolved_username"] = movie_user.username
+
+    return JSONResponse(content=response_payload)
 
 
 async def get_schedule(db: Session = Depends(get_db)):
