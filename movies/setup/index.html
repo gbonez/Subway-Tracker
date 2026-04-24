@@ -226,7 +226,8 @@
                 <label>
                     Phone number
                     <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+11234567890">
-                    <span class="hint">Enter your number exactly like +11234567890, including the plus sign and country code. Leave blank to opt out.</span>
+                    <span class="hint">Enter your number exactly like +11234567890, including the plus sign and country
+                        code. Leave blank to opt out.</span>
                 </label>
 
                 <div class="actions">
@@ -241,7 +242,8 @@
                 <div class="logs-header">Setup Logs</div>
                 <pre id="logs-output"></pre>
             </div>
-            <p class="sync-helper">Initial friend sync takes no more than 30 minutes. You can close this page if you'd like.</p>
+            <p class="sync-helper">Initial friend sync takes no more than 30 minutes. You can close this page if you'd
+                like.</p>
         </section>
     </main>
 
@@ -291,6 +293,10 @@
 
                 if (data.job && Array.isArray(data.job.logs)) {
                     renderLogs(data.job.logs);
+                }
+
+                if (data.job?.diagnostic) {
+                    statusEl.textContent = data.job.diagnostic;
                 }
 
                 if (data.job?.state === 'failed') {

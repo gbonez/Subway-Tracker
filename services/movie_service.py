@@ -35,6 +35,7 @@ LETTERBOXD_FRIEND_USERNAMES_ENV = [
     if username.strip()
 ]
 MOVIE_SYNC_WORKER_POLL_SECONDS = float(os.getenv("MOVIE_SYNC_WORKER_POLL_SECONDS", "2"))
+MOVIE_SYNC_QUEUE_WARNING_SECONDS = float(os.getenv("MOVIE_SYNC_QUEUE_WARNING_SECONDS", "20"))
 
 HEADERS = {
     "User-Agent": (
@@ -184,6 +185,19 @@ def get_sync_job_status(username: str) -> Optional[dict]:
         job = _get_movie_sync_job(db, normalized_username)
         if job is None:
             return None
+
+        queued_seconds = None
+        diagnostic = None
+        if job.state == "queued":
+            queue_anchor = job.started_at or job.updated_at or job.created_at
+            if queue_anchor is not None:
+                queued_seconds = max(0.0, (datetime.now(timezone.utc) - queue_anchor).total_seconds())
+                if queued_seconds >= MOVIE_SYNC_QUEUE_WARNING_SECONDS:
+                    diagnostic = (
+                        "This sync is still queued and no worker has picked it up yet. "
+                        "On Railway, that usually means the worker service is not running or APP_ROLE is not set to worker."
+                    )
+
         return {
             "job_type": job.job_type,
             "state": job.state,
@@ -192,6 +206,8 @@ def get_sync_job_status(username: str) -> Optional[dict]:
             "redirect_path": job.redirect_path,
             "error": job.error,
             "completed": job.completed,
+            "queued_seconds": queued_seconds,
+            "diagnostic": diagnostic,
         }
     finally:
         db.close()
