@@ -225,6 +225,37 @@
     </main>
 
     <script>
+        function getApiBase() {
+            const isLocalStaticPage = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+            const isRailwayApp = window.location.hostname.endsWith('up.railway.app');
+
+            if (isLocalStaticPage) {
+                return 'http://127.0.0.1:8010';
+            }
+
+            if (isRailwayApp) {
+                return window.location.origin;
+            }
+
+            return 'https://subway-tracker-production.up.railway.app';
+        }
+
+        async function parseApiResponse(response) {
+            const rawBody = await response.text();
+            const contentType = response.headers.get('content-type') || '';
+
+            if (contentType.includes('application/json')) {
+                return rawBody ? JSON.parse(rawBody) : {};
+            }
+
+            if (!rawBody) {
+                return {};
+            }
+
+            throw new Error(`Server returned a non-JSON response (${response.status}). ${rawBody.slice(0, 180)}`);
+        }
+
+        const API = getApiBase();
         const sendButton = document.getElementById('send-btn');
         const statusBox = document.getElementById('status');
         const customSendButton = document.getElementById('custom-send-btn');
@@ -253,13 +284,13 @@
             showStatus(statusBox, 'success', 'Sending text...');
 
             try {
-                const response = await fetch('/movies/text/send', {
+                const response = await fetch(`${API}/movies/text/send`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     }
                 });
-                const payload = await response.json();
+                const payload = await parseApiResponse(response);
 
                 if (!response.ok) {
                     throw new Error(payload.detail || 'Text request failed.');
@@ -283,7 +314,7 @@
             showStatus(customStatusBox, 'success', 'Sending text...');
 
             try {
-                const response = await fetch('/movies/text/send-custom', {
+                const response = await fetch(`${API}/movies/text/send-custom`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -295,7 +326,7 @@
                         setup_username: setupUsernameInput.value
                     })
                 });
-                const payload = await response.json();
+                const payload = await parseApiResponse(response);
 
                 if (!response.ok) {
                     throw new Error(payload.detail || 'Text request failed.');
