@@ -141,7 +141,12 @@ def normalize_app_username(value: str) -> str:
 
 
 def normalize_letterboxd_username(value: str) -> str:
-    normalized = (value or "").strip().lower().lstrip("@")
+    normalized = (value or "").strip().lower()
+    profile_match = re.match(r"https?://(?:www\.)?letterboxd\.com/([^/?#]+)/?", normalized)
+    if profile_match:
+        normalized = profile_match.group(1)
+
+    normalized = normalized.lstrip("@")
     normalized = normalized.strip("/")
     if not normalized:
         raise ValueError("Letterboxd username is required.")
