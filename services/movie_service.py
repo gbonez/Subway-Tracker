@@ -203,7 +203,8 @@ def get_sync_job_status(username: str) -> Optional[dict]:
                 if queued_seconds >= MOVIE_SYNC_QUEUE_WARNING_SECONDS:
                     diagnostic = (
                         "This sync is still queued and no worker has picked it up yet. "
-                        "On Railway, that usually means the worker service is not running or APP_ROLE is not set to worker."
+                        "On Railway, that usually means the worker service is not running, APP_ROLE is not set to worker, "
+                        "or the worker is attached to a different database than the web service."
                     )
 
         return {
@@ -285,6 +286,8 @@ def process_next_movie_sync_job() -> bool:
     job = claim_next_movie_sync_job()
     if job is None:
         return False
+
+    _log(f"🎬 Worker claimed {job['job_type']} job for {job['username']}")
 
     if job.get("progress_logs"):
         append_sync_job_log(job["username"], f"Worker picked up {job['job_type']} for {job['username']}.")
