@@ -1,6 +1,7 @@
 """Movie services for Metrograph schedule scraping and stored Letterboxd data."""
 
 import json
+import importlib
 import os
 import re
 import time
@@ -268,46 +269,128 @@ def _serialize_movie_user(user: MovieUser) -> dict:
     }
 
 
-def _fetch_letterboxd_following_profiles(username: str) -> list[dict]:
-    profiles: dict[str, dict] = {}
-    page = 1
-    while True:
-        url = f"{LETTERBOXD_BASE_URL}/{username}/following/page/{page}/"
+def _extract_letterboxd_username_from_url(profile_url: str) -> str:
+    path = requests.utils.urlparse(profile_url).path.strip("/")
+    return path.split("/")[0] if path else ""
+
+
+def _collect_letterboxd_following_profiles(page, playwright_timeout_error) -> list[dict]:
+    page.wait_for_timeout(4000)
+
+    selectors = [
+        ".person-summary",
+        "a.name",
+        "a.avatar",
+    ]
+
+    table_found = False
+    for selector in selectors:
         try:
-            response = requests.get(url, headers=HEADERS, timeout=15)
-            if response.status_code == 404:
-                break
-            response.raise_for_status()
-        except requests.RequestException as error:
-            _log(f"  ⚠️  Letterboxd following fetch failed for {username} (page {page}): {error}")
+            page.locator(selector).first.wait_for(state="attached", timeout=15000)
+            table_found = True
             break
+        except playwright_timeout_error:
+            continue
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        summaries = soup.select(".person-summary")
-        if not summaries:
-            break
+    if not table_found and page.locator("a.name").count() > 0:
+        table_found = True
 
-        for summary in summaries:
-            link = summary.select_one("a.name") or summary.select_one("a.avatar")
-            if link is None:
-                continue
-            href = link.get("href", "").strip()
-            display_name = link.get_text(" ", strip=True) or None
-            if not href or "/film/" in href or "/following/" in href or "/followers/" in href:
-                continue
-            profile_username = href.strip("/").split("/")[0].lower()
-            if not profile_username:
-                continue
-            profiles[profile_username] = {
-                "username": profile_username,
-                "display_name": display_name,
-                "profile_url": urljoin(f"{LETTERBOXD_BASE_URL}/", href.lstrip("/")),
-            }
+    if not table_found:
+        raise RuntimeError("Could not find the Letterboxd following table on the page.")
 
-        if not soup.select_one("a.next"):
-            break
-        page += 1
-        time.sleep(0.3)
+    profiles = {}
+    summaries = page.locator(".person-summary")
+    for index in range(summaries.count()):
+        summary = summaries.nth(index)
+        name_link = summary.locator("a.name").first
+        if name_link.count() == 0:
+            continue
+
+        href = name_link.get_attribute("href")
+        display_name = name_link.inner_text().strip()
+        if not href:
+            continue
+        if href.startswith("/sign-in") or href.startswith("/search"):
+            continue
+        if any(segment in href for segment in ["/film/", "/list/", "/reviews/", "/likes/", "/diary/", "/following/", "/followers/"]):
+            continue
+
+        full_url = f"{LETTERBOXD_BASE_URL}{href}" if href.startswith("/") else href
+        profile_username = _extract_letterboxd_username_from_url(full_url)
+        if not profile_username:
+            continue
+
+        profiles[profile_username] = {
+            "username": profile_username,
+            "display_name": display_name or profile_username,
+            "profile_url": full_url,
+        }
+
+    return sorted(profiles.values(), key=lambda profile: profile["username"])
+
+
+def _fetch_letterboxd_following_profiles(username: str) -> list[dict]:
+    try:
+        playwright_sync_api = importlib.import_module("playwright.sync_api")
+        PlaywrightTimeoutError = getattr(playwright_sync_api, "TimeoutError")
+        sync_playwright = getattr(playwright_sync_api, "sync_playwright")
+    except Exception as error:
+        _log(f"  ⚠️  Playwright is not available for Letterboxd following fetches: {error}")
+        return []
+
+    profiles: dict[str, dict] = {}
+    visited_pages = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+
+        try:
+            page_number = 1
+            while True:
+                page_url = f"{LETTERBOXD_BASE_URL}/{username}/following/"
+                if page_number > 1:
+                    page_url = f"{LETTERBOXD_BASE_URL}/{username}/following/page/{page_number}/"
+
+                page = browser.new_page(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="en-US",
+                    viewport={"width": 1440, "height": 1200},
+                )
+                page.add_init_script(
+                    """
+                    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+                    Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+                    """
+                )
+
+                try:
+                    page.goto(page_url, wait_until="domcontentloaded", timeout=120000)
+                    if "/sign-in/" in page.url:
+                        raise RuntimeError("Letterboxd redirected the following page to sign-in.")
+
+                    page_profiles = _collect_letterboxd_following_profiles(page, PlaywrightTimeoutError)
+                    if not page_profiles:
+                        break
+
+                    visited_pages.append(page.url)
+                    for profile in page_profiles:
+                        profiles[profile["username"]] = profile
+
+                    if page.locator("a.next").count() == 0:
+                        break
+                    page_number += 1
+                finally:
+                    page.close()
+        except Exception as error:
+            visited = ", ".join(visited_pages) if visited_pages else "none"
+            _log(f"  ⚠️  Letterboxd following fetch failed for {username} via Playwright: {error}. Visited pages: {visited}")
+            return []
+        finally:
+            browser.close()
 
     return sorted(profiles.values(), key=lambda profile: profile["username"])
 
