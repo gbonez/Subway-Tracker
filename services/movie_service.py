@@ -1536,11 +1536,28 @@ def _send_movie_sync_sms(user: MovieUser, sync_result: dict) -> None:
         _log(f"  ⚠️  SMS notification failed for {user.username}: {error}")
 
 
+def _send_movie_setup_welcome_sms(user: MovieUser) -> None:
+    if not user.phone_number:
+        return
+
+    message_body = (
+        "Hello! You have been signed up for gbonez's Automated Metrograph Calendar Services!\n\n"
+        f"Your username is : {user.username}.\n\n"
+        f"Please head to gbonez.org/movies/{user.username} to see your data or to stop services. Thanks :)"
+    )
+
+    try:
+        send_text_message(user.phone_number, message_body)
+    except Exception as error:
+        _log(f"  ⚠️  Setup welcome SMS failed for {user.username}: {error}")
+
+
 def run_movie_refresh_pipeline(
     db: Session,
     user: Optional[MovieUser] = None,
     *,
     send_sms: bool = False,
+    sms_mode: str = "summary",
     progress_callback: Optional[Callable[[str], None]] = None,
 ) -> dict:
     active_user = user or get_or_create_default_movie_user(db)
@@ -1564,7 +1581,10 @@ def run_movie_refresh_pipeline(
         active_user = set_movie_user_sync_state(db, active_user, sync_in_progress=False, friend_sync_pending=False)
         sync_result["user"] = _serialize_movie_user(active_user)
         if send_sms:
-            _send_movie_sync_sms(active_user, sync_result)
+            if sms_mode == "setup-welcome":
+                _send_movie_setup_welcome_sms(active_user)
+            else:
+                _send_movie_sync_sms(active_user, sync_result)
         if progress_callback is not None:
             progress_callback(f"Stored friend data and refreshed Metrograph data for {active_user.username}.")
         return sync_result
@@ -1706,6 +1726,7 @@ def run_movie_refresh_pipeline_for_username(
     username: str,
     *,
     send_sms: bool = False,
+    sms_mode: str = "summary",
     progress_logs: bool = False,
     redirect_path: Optional[str] = None,
 ) -> None:
@@ -1720,7 +1741,7 @@ def run_movie_refresh_pipeline_for_username(
             raise LookupError("User not found.")
 
         callback = (lambda message: append_sync_job_log(username, message)) if progress_logs else None
-        run_movie_refresh_pipeline(db, user, send_sms=send_sms, progress_callback=callback)
+        run_movie_refresh_pipeline(db, user, send_sms=send_sms, sms_mode=sms_mode, progress_callback=callback)
         if progress_logs:
             finish_sync_job(username, redirect_path=redirect_path)
     except Exception as error:

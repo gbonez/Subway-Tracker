@@ -123,6 +123,7 @@ async def setup_movie_user(request: MovieUserSetupRequest, background_tasks: Bac
             run_movie_refresh_pipeline_for_username,
             user.username,
             send_sms=True,
+            sms_mode="setup-welcome",
             progress_logs=True,
             redirect_path=f"/movies/{user.username}?welcome=1",
         )
