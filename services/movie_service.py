@@ -76,6 +76,14 @@ def _job_status_key(username: str) -> str:
     return normalize_app_username(username)
 
 
+def _ensure_utc_datetime(value: Optional[datetime]) -> Optional[datetime]:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _get_movie_sync_job(db: Session, username: str) -> Optional[MovieSyncJob]:
     return db.query(MovieSyncJob).filter(MovieSyncJob.username == _job_status_key(username)).first()
 
@@ -189,7 +197,7 @@ def get_sync_job_status(username: str) -> Optional[dict]:
         queued_seconds = None
         diagnostic = None
         if job.state == "queued":
-            queue_anchor = job.started_at or job.updated_at or job.created_at
+            queue_anchor = _ensure_utc_datetime(job.started_at) or _ensure_utc_datetime(job.updated_at) or _ensure_utc_datetime(job.created_at)
             if queue_anchor is not None:
                 queued_seconds = max(0.0, (datetime.now(timezone.utc) - queue_anchor).total_seconds())
                 if queued_seconds >= MOVIE_SYNC_QUEUE_WARNING_SECONDS:
