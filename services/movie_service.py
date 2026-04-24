@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session, selectinload
 
-from models import MovieFriendRating, MovieLetterboxdData, MovieScheduleSnapshot, MovieUser, MovieUserFriend, SessionLocal
+from models import MovieFriendRating, MovieLetterboxdData, MovieMemberFilmCache, MovieScheduleSnapshot, MovieUser, MovieUserFriend, SessionLocal
 from services.sms_utils import send_text_message
 
 SCHEDULE_SNAPSHOT_KEY = "metrograph_schedule"
@@ -110,8 +110,8 @@ def finish_sync_job(username: str, redirect_path: Optional[str] = None, error: O
         job["redirect_path"] = redirect_path
         if error:
             job["logs"].append(f"Sync failed: {error}")
-        elif redirect_path:
-            job["logs"].append("Sync complete. Redirecting to your movie page.")
+        else:
+            job["logs"].append("Done!")
 
 
 def get_sync_job_status(username: str) -> Optional[dict]:
@@ -151,14 +151,12 @@ def normalize_letterboxd_username(value: str) -> str:
 
 
 def normalize_phone_number(value: str | None) -> str:
-    digits = re.sub(r"\D", "", value or "")
-    if not digits:
+    raw_value = (value or "").strip()
+    if not raw_value:
         return ""
-    if len(digits) == 10:
-        digits = f"1{digits}"
-    if len(digits) != 11 or not digits.startswith("1"):
-        raise ValueError("Phone number must be a US number like +15555555555.")
-    return f"+{digits}"
+    if not re.fullmatch(r"\+[1-9]\d{7,14}", raw_value):
+        raise ValueError("Phone number must be entered exactly like +11234567890, including the plus sign and country code.")
+    return raw_value
 
 
 def get_movie_user(db: Session, username: str) -> Optional[MovieUser]:
@@ -267,6 +265,75 @@ def _serialize_movie_user(user: MovieUser) -> dict:
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
     }
+
+
+def _find_cached_member_film_data(db: Session, username: str, normalized_title: str, year: Optional[int]) -> Optional[dict]:
+    cache_query = db.query(MovieMemberFilmCache).filter(
+        MovieMemberFilmCache.member_username == username,
+        MovieMemberFilmCache.normalized_title == normalized_title,
+    )
+    cache_entry = None
+    if year is None:
+        cache_entry = cache_query.filter(MovieMemberFilmCache.year.is_(None)).first()
+    else:
+        cache_entry = cache_query.filter(MovieMemberFilmCache.year == year).first() or cache_query.filter(MovieMemberFilmCache.year.is_(None)).first()
+
+    if cache_entry is not None and _was_cache_scanned_recently(cache_entry.last_scanned_at):
+        return {
+            "watched": cache_entry.watched,
+            "personal_rating": cache_entry.personal_rating,
+        }
+
+    matching_user = db.query(MovieUser).filter(MovieUser.letterboxd_username == username).first()
+    if matching_user is None:
+        return None
+
+    user_entry = _find_movie_entry(db, matching_user.id, normalized_title, year)
+    if user_entry is None or not _was_scanned_recently(user_entry):
+        return None
+
+    cached_info = {
+        "watched": user_entry.watched,
+        "personal_rating": user_entry.personal_rating,
+    }
+    _store_member_film_cache(db, username, normalized_title, year, cached_info)
+    return cached_info
+
+
+def _store_member_film_cache(db: Session, username: str, normalized_title: str, year: Optional[int], info: dict) -> None:
+    cache_query = db.query(MovieMemberFilmCache).filter(
+        MovieMemberFilmCache.member_username == username,
+        MovieMemberFilmCache.normalized_title == normalized_title,
+    )
+    cache_entry = None
+    if year is None:
+        cache_entry = cache_query.filter(MovieMemberFilmCache.year.is_(None)).first()
+    else:
+        cache_entry = cache_query.filter(MovieMemberFilmCache.year == year).first()
+
+    if cache_entry is None:
+        cache_entry = MovieMemberFilmCache(
+            member_username=username,
+            normalized_title=normalized_title,
+            year=year,
+        )
+        db.add(cache_entry)
+
+    cache_entry.watched = bool(info.get("watched"))
+    cache_entry.personal_rating = info.get("personal_rating")
+    cache_entry.last_scanned_at = datetime.now(timezone.utc)
+    db.flush()
+
+
+def _was_cache_scanned_recently(last_scanned_at: Optional[datetime]) -> bool:
+    if last_scanned_at is None:
+        return False
+
+    timestamp = last_scanned_at
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+
+    return timestamp >= datetime.now(timezone.utc) - timedelta(days=LETTERBOXD_REFRESH_SKIP_DAYS)
 
 
 def _extract_letterboxd_username_from_url(profile_url: str) -> str:
@@ -1020,13 +1087,20 @@ def _fetch_letterboxd_rating(title: str, year: Optional[int], film_path: Optiona
     return None
 
 
-def _fetch_member_film_data(username: str, title: str, year: Optional[int], director: Optional[str] = None) -> dict:
+def _fetch_member_film_data(db: Session, username: str, title: str, year: Optional[int], director: Optional[str] = None) -> dict:
+    normalized_title = _norm(title)
+    cached_info = _find_cached_member_film_data(db, username, normalized_title, year)
+    if cached_info is not None:
+        return cached_info
+
     info = _try_member_letterboxd_paths(username, _generate_slug_candidates(title, year), title, year)
     if info["watched"]:
+        _store_member_film_cache(db, username, normalized_title, year, info)
         return info
 
     info = _try_member_letterboxd_paths(username, _search_letterboxd_film_paths(title, year, director), title, year)
     if info["watched"]:
+        _store_member_film_cache(db, username, normalized_title, year, info)
         return info
 
     imdb_match = _fetch_imdb_movie_match(title, year)
@@ -1039,6 +1113,7 @@ def _fetch_member_film_data(username: str, title: str, year: Optional[int], dire
             allow_year_mismatch=True,
         )
         if info["watched"]:
+            _store_member_film_cache(db, username, normalized_title, year, info)
             return info
 
         info = _try_member_letterboxd_paths(
@@ -1049,9 +1124,12 @@ def _fetch_member_film_data(username: str, title: str, year: Optional[int], dire
             allow_year_mismatch=True,
         )
         if info["watched"]:
+            _store_member_film_cache(db, username, normalized_title, year, info)
             return info
 
-    return {"watched": False, "personal_rating": None}
+    not_watched_info = {"watched": False, "personal_rating": None}
+    _store_member_film_cache(db, username, normalized_title, year, not_watched_info)
+    return not_watched_info
 
 
 def _find_movie_entry(db: Session, user_id: int, normalized_title: str, year: Optional[int]) -> Optional[MovieLetterboxdData]:
@@ -1507,19 +1585,19 @@ def update_letterboxd_table(
 
     active_user = user or get_or_create_default_movie_user(db)
 
-    _log("🎬 Scraping Metrograph titles for Letterboxd sync...")
-    if progress_callback is not None:
-        progress_callback("Scraping Metrograph titles for this account.")
-    showings = scrape_schedule()
-    unique_films = sorted({(showing["title"], showing.get("year")) for showing in showings}, key=lambda item: (item[0], item[1] or 0))
-    _log(f"  Found {len(unique_films)} unique Metrograph films to scan.")
-
     _log("  Fetching Letterboxd watchlist...")
     watchlist = _fetch_letterboxd_watchlist(active_user.letterboxd_username)
     friend_profiles = _refresh_movie_user_friends(db, active_user, progress_callback=progress_callback)
     _log(f"  Loaded {len(friend_profiles)} friend profiles.")
     if progress_callback is not None:
-        progress_callback(f"Friend list saved. Syncing movie matches for {len(unique_films)} Metrograph titles.")
+        progress_callback("Scraping Metrograph titles for this account.")
+
+    _log("🎬 Scraping Metrograph titles for Letterboxd sync...")
+    showings = scrape_schedule()
+    unique_films = sorted({(showing["title"], showing.get("year")) for showing in showings}, key=lambda item: (item[0], item[1] or 0))
+    _log(f"  Found {len(unique_films)} unique Metrograph films to scan.")
+    if progress_callback is not None:
+        progress_callback("Syncing friend list with Metrograph showings...")
 
     processed_components = set()
     updated_movies = 0
@@ -1550,7 +1628,7 @@ def update_letterboxd_table(
 
             watchlist_path = watchlist.get(normalized_title)
             public_rating = _fetch_letterboxd_rating(component["search_title"], year, watchlist_path, director=film_director)
-            personal = _fetch_member_film_data(active_user.letterboxd_username, component["search_title"], year, director=film_director)
+            personal = _fetch_member_film_data(db, active_user.letterboxd_username, component["search_title"], year, director=film_director)
             is_on_watchlist = normalized_title in watchlist
 
             is_new_entry = entry is None
@@ -1586,7 +1664,7 @@ def update_letterboxd_table(
             db.flush()
 
             for friend_index, profile in enumerate(friend_profiles, start=1):
-                info = _fetch_member_film_data(profile["username"], component["search_title"], year, director=film_director)
+                info = _fetch_member_film_data(db, profile["username"], component["search_title"], year, director=film_director)
                 _log(
                     f"    Friend {friend_index}/{len(friend_profiles)} {profile['username']}: watched={info['watched']} rating={info['personal_rating']}"
                 )

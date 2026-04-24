@@ -191,6 +191,13 @@
             color: #d9e6db;
             white-space: pre-wrap;
         }
+
+        .sync-helper {
+            margin-top: 0.9rem;
+            color: #a8b5aa;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
     </style>
 </head>
 
@@ -218,9 +225,8 @@
 
                 <label>
                     Phone number
-                    <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+15555555555">
-                    <span class="hint">For SMS updates when movies you want to see are playing. Leave empty to opt
-                        out.</span>
+                    <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+11234567890">
+                    <span class="hint">Enter your number exactly like +11234567890, including the plus sign and country code. Leave blank to opt out.</span>
                 </label>
 
                 <div class="actions">
@@ -235,6 +241,7 @@
                 <div class="logs-header">Setup Logs</div>
                 <pre id="logs-output"></pre>
             </div>
+            <p class="sync-helper">Initial friend sync takes no more than 30 minutes. You can close this page if you'd like.</p>
         </section>
     </main>
 
@@ -340,7 +347,8 @@
                 }
 
                 statusEl.textContent = 'Account created. Finding your Letterboxd friends and storing their data...';
-                renderLogs(['Setup accepted.', 'Waiting for friend discovery to start...']);
+                logsPanel.style.display = 'block';
+                logsOutput.textContent = '';
                 if (setupStatusPoll) {
                     clearInterval(setupStatusPoll);
                 }

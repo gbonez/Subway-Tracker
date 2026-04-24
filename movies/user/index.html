@@ -621,8 +621,7 @@
             </div>
             <span id="scrape-status"></span>
         </div>
-        <div class="sync-note">Letterboxd watch data updates every day. Friend data refreshes automatically, so manual
-            refresh is not available on this page.</div>
+        <div class="sync-note">Letterboxd watchlist, ratings and friend data updates every 24 hours.</div>
     </div>
 
     <div class="filter-bar">
@@ -729,6 +728,7 @@
         const ratingsModalSummary = document.getElementById('ratings-modal-summary');
         const ratingsModalChart = document.getElementById('ratings-modal-chart');
         const noticeModal = document.getElementById('notice-modal');
+        let hasShownSyncInProgressPrompt = false;
 
         function updateQueryParam(key, value) {
             const nextUrl = new URL(window.location.href);
@@ -740,7 +740,9 @@
             window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
         }
 
-        function openNoticeModal(message) {
+        function openNoticeModal(message, title = 'Friend data update scheduled', kicker = 'Letterboxd Update') {
+            document.querySelector('#notice-modal .modal-kicker').textContent = kicker;
+            document.getElementById('notice-modal-title').textContent = title;
             document.getElementById('notice-modal-subtitle').textContent = message;
             noticeModal.classList.add('open');
             noticeModal.setAttribute('aria-hidden', 'false');
@@ -959,6 +961,14 @@
                 const editLetterboxdButton = document.getElementById('edit-letterboxd-btn');
                 editLetterboxdButton.disabled = Boolean(user.sync_in_progress);
                 editLetterboxdButton.title = user.sync_in_progress ? 'A Letterboxd sync is currently running for this user.' : '';
+                if (user.sync_in_progress && !hasShownSyncInProgressPrompt) {
+                    hasShownSyncInProgressPrompt = true;
+                    openNoticeModal(
+                        'Your data is currently syncing and may render incomplete while that runs. It will properly load when the sync is ready.',
+                        'Sync in progress',
+                        'Movie Sync'
+                    );
+                }
                 return true;
             } catch (error) {
                 showError('Could not reach the server.');
@@ -1226,7 +1236,7 @@
         }
 
         async function editPhoneNumber() {
-            const nextPhoneNumber = window.prompt('Enter a phone number like +15555555555. Leave it blank to remove SMS notifications.', '');
+            const nextPhoneNumber = window.prompt('Enter a phone number exactly like +11234567890, including the plus sign and country code. Leave it blank to remove SMS notifications.', '');
             if (nextPhoneNumber === null) {
                 return;
             }

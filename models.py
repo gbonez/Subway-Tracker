@@ -246,6 +246,21 @@ class MovieFriendRating(Base):
     movie = relationship("MovieLetterboxdData", back_populates="friend_ratings")
 
 
+class MovieMemberFilmCache(Base):
+    __tablename__ = "movie_member_film_cache"
+    __table_args__ = (
+        UniqueConstraint("member_username", "normalized_title", "year", name="uq_movie_member_film_cache"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    member_username = Column(String, nullable=False, index=True)
+    normalized_title = Column(String, nullable=False, index=True)
+    year = Column(Integer, nullable=True, index=True)
+    watched = Column(Boolean, default=False, nullable=False)
+    personal_rating = Column(Float, nullable=True)
+    last_scanned_at = Column(DateTime, nullable=True)
+
+
 class MovieScheduleSnapshot(Base):
     __tablename__ = "movie_schedule_snapshots"
 
