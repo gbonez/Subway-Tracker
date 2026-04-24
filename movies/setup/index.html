@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Movie Page</title>
+    <link rel="icon" type="image/x-icon" href="/forrest.ico">
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --accent-color: #4a9eff;
+            --border-color: #333;
+            --panel-color: #1b1b1b;
+            --muted-color: #909090;
+            --success-color: #7edc86;
+            --error-color: #ff8a92;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 1.5rem;
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(74, 158, 255, 0.16), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(126, 220, 134, 0.12), transparent 30%),
+                var(--bg-color);
+        }
+
+        main {
+            max-width: 620px;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: #9d9d9d;
+            text-decoration: none;
+            margin-bottom: 1.75rem;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        .card {
+            padding: 1.6rem;
+            border-radius: 18px;
+            border: 1px solid var(--border-color);
+            background: rgba(20, 20, 20, 0.92);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        .kicker {
+            color: var(--success-color);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+        }
+
+        h1 {
+            font-size: 2.1rem;
+            margin-bottom: 0.7rem;
+        }
+
+        p.lead {
+            color: var(--muted-color);
+            line-height: 1.6;
+            margin-bottom: 1.4rem;
+        }
+
+        form {
+            display: grid;
+            gap: 1rem;
+        }
+
+        label {
+            display: grid;
+            gap: 0.45rem;
+            font-size: 0.92rem;
+            color: #d4d4d4;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.85rem 0.95rem;
+            border-radius: 10px;
+            border: 1px solid #3a3a3a;
+            background: var(--panel-color);
+            color: var(--text-color);
+            font: inherit;
+        }
+
+        input:focus {
+            outline: 2px solid rgba(74, 158, 255, 0.35);
+            border-color: var(--accent-color);
+        }
+
+        .hint {
+            color: #8f8f8f;
+            font-size: 0.82rem;
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            margin-top: 0.4rem;
+        }
+
+        button,
+        a.button-link {
+            appearance: none;
+            border: 1px solid #4a4a4a;
+            border-radius: 10px;
+            background: #2a2a2a;
+            color: #fff;
+            font: inherit;
+            text-decoration: none;
+            padding: 0.8rem 1rem;
+            cursor: pointer;
+        }
+
+        button:hover,
+        a.button-link:hover {
+            background: #343434;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        #status {
+            min-height: 1.4rem;
+            color: #b8b8b8;
+            font-size: 0.9rem;
+        }
+
+        #error {
+            display: none;
+            margin-top: 1rem;
+            padding: 0.9rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 138, 146, 0.28);
+            background: rgba(255, 138, 146, 0.08);
+            color: var(--error-color);
+            line-height: 1.5;
+        }
+
+        #error a {
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <a href="/movies/" class="back-link">← Back to Movies</a>
+
+        <section class="card">
+            <div class="kicker">Movies Setup</div>
+            <h1>Create your movie dashboard</h1>
+            <p class="lead">Pick a website username, connect your Letterboxd account, and add the phone number that
+                should receive a text when the Letterboxd refresh finishes.</p>
+
+            <form id="setup-form">
+                <label>
+                    Website username
+                    <input id="username" name="username" autocomplete="username" required>
+                    <span class="hint">Used for your page URL: /movies/your-username</span>
+                </label>
+
+                <label>
+                    Letterboxd username
+                    <input id="letterboxd_username" name="letterboxd_username" required>
+                </label>
+
+                <label>
+                    Phone number
+                    <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+15555555555" required>
+                    <span class="hint">Stored as +1xxxxxxxxxx for SMS notifications.</span>
+                </label>
+
+                <div class="actions">
+                    <button type="submit" id="submit-btn">Create account and sync Letterboxd</button>
+                    <a class="button-link" href="/movies/login/">Already have an account? Log in</a>
+                </div>
+            </form>
+
+            <p id="status"></p>
+            <div id="error"></div>
+        </section>
+    </main>
+
+    <script>
+        function getApiBase() {
+            const isLocalStaticPage = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+            const isRailwayApp = window.location.hostname.endsWith('up.railway.app');
+
+            if (isLocalStaticPage) {
+                return 'http://127.0.0.1:8010';
+            }
+
+            if (isRailwayApp) {
+                return window.location.origin;
+            }
+
+            return 'https://subway-tracker-production.up.railway.app';
+        }
+
+        const API = getApiBase();
+        const form = document.getElementById('setup-form');
+        const errorEl = document.getElementById('error');
+        const statusEl = document.getElementById('status');
+        const submitBtn = document.getElementById('submit-btn');
+
+        function showError(message) {
+            errorEl.innerHTML = message;
+            errorEl.style.display = 'block';
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            errorEl.style.display = 'none';
+            statusEl.textContent = 'Creating account and running the initial Letterboxd sync. This can take a while.';
+            submitBtn.disabled = true;
+
+            const payload = {
+                username: document.getElementById('username').value,
+                letterboxd_username: document.getElementById('letterboxd_username').value,
+                phone_number: document.getElementById('phone_number').value,
+            };
+
+            try {
+                const response = await fetch(`${API}/movies/users/setup`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    statusEl.textContent = '';
+                    const isExistingUsername = response.status === 409;
+                    showError(`${data.detail || 'Setup failed.'}${isExistingUsername ? ' <a href="/movies/login/">Log in instead.</a>' : ''}`);
+                    return;
+                }
+
+                statusEl.textContent = 'Account created. Redirecting to your movie page...';
+                window.location.href = data.redirect_path || `/movies/${payload.username}`;
+            } catch (error) {
+                statusEl.textContent = '';
+                showError('Could not reach the server.');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

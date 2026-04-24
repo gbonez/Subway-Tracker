@@ -8,18 +8,21 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
-from urllib.parse import quote
+from urllib.parse import quote, urljoin
 from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session, selectinload
 
-from models import MovieFriendRating, MovieLetterboxdData, MovieScheduleSnapshot
+from models import MovieFriendRating, MovieLetterboxdData, MovieScheduleSnapshot, MovieUser, MovieUserFriend
+from services.sms_utils import send_text_message
 
 SCHEDULE_SNAPSHOT_KEY = "metrograph_schedule"
 LETTERBOXD_FRIENDS_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "letterboxd_friends.json")
 LETTERBOXD_USERNAME = "gbonez100"
+DEFAULT_MOVIE_USERNAME = os.getenv("DEFAULT_MOVIE_USERNAME", "grayson")
+DEFAULT_MOVIE_PHONE_NUMBER = os.getenv("DEFAULT_MOVIE_PHONE_NUMBER") or os.getenv("MY_PHONE_NUMBER") or "+10000000000"
 ENABLE_LETTERBOXD = os.getenv("ENABLE_LETTERBOXD", "true").lower() == "true"
 LETTERBOXD_REFRESH_SKIP_DAYS = int(os.getenv("LETTERBOXD_REFRESH_SKIP_DAYS", "7"))
 METROGRAPH_CALENDAR_URL = "https://metrograph.com/nyc/"
@@ -67,6 +70,156 @@ def _log(message: str) -> None:
 
 def _norm(value: str) -> str:
     return re.sub(r"[^a-z0-9 ]", "", value.lower()).strip()
+
+
+def normalize_app_username(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_-]", "", (value or "").strip().lower())
+    if not normalized:
+        raise ValueError("Username is required.")
+    return normalized
+
+
+def normalize_letterboxd_username(value: str) -> str:
+    normalized = (value or "").strip().lower().lstrip("@")
+    normalized = normalized.strip("/")
+    if not normalized:
+        raise ValueError("Letterboxd username is required.")
+    if not re.fullmatch(r"[a-z0-9_-]+", normalized):
+        raise ValueError("Letterboxd username may only contain letters, numbers, hyphens, and underscores.")
+    return normalized
+
+
+def normalize_phone_number(value: str) -> str:
+    digits = re.sub(r"\D", "", value or "")
+    if len(digits) == 10:
+        digits = f"1{digits}"
+    if len(digits) != 11 or not digits.startswith("1"):
+        raise ValueError("Phone number must be a US number like +15555555555.")
+    return f"+{digits}"
+
+
+def get_movie_user(db: Session, username: str) -> Optional[MovieUser]:
+    normalized_username = normalize_app_username(username)
+    return db.query(MovieUser).filter(MovieUser.username == normalized_username).first()
+
+
+def get_or_create_default_movie_user(db: Session) -> MovieUser:
+    existing_user = db.query(MovieUser).filter(MovieUser.username == DEFAULT_MOVIE_USERNAME).first()
+    if existing_user is not None:
+        return existing_user
+
+    default_user = MovieUser(
+        username=DEFAULT_MOVIE_USERNAME,
+        letterboxd_username=normalize_letterboxd_username(LETTERBOXD_USERNAME),
+        phone_number=normalize_phone_number(DEFAULT_MOVIE_PHONE_NUMBER),
+    )
+    db.add(default_user)
+    db.commit()
+    db.refresh(default_user)
+    return default_user
+
+
+def create_movie_user(db: Session, username: str, letterboxd_username: str, phone_number: str) -> MovieUser:
+    normalized_username = normalize_app_username(username)
+    if db.query(MovieUser).filter(MovieUser.username == normalized_username).first() is not None:
+        raise ValueError("That username already exists. Log in with that username instead.")
+
+    user = MovieUser(
+        username=normalized_username,
+        letterboxd_username=normalize_letterboxd_username(letterboxd_username),
+        phone_number=normalize_phone_number(phone_number),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_movie_user_letterboxd_username(db: Session, username: str, letterboxd_username: str) -> MovieUser:
+    user = get_movie_user(db, username)
+    if user is None:
+        raise LookupError("User not found.")
+
+    user.letterboxd_username = normalize_letterboxd_username(letterboxd_username)
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _serialize_movie_user(user: MovieUser) -> dict:
+    return {
+        "username": user.username,
+        "letterboxd_username": user.letterboxd_username,
+        "phone_number": user.phone_number,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+    }
+
+
+def _fetch_letterboxd_following_profiles(username: str) -> list[dict]:
+    profiles: dict[str, dict] = {}
+    page = 1
+    while True:
+        url = f"{LETTERBOXD_BASE_URL}/{username}/following/page/{page}/"
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=15)
+            if response.status_code == 404:
+                break
+            response.raise_for_status()
+        except requests.RequestException as error:
+            _log(f"  ⚠️  Letterboxd following fetch failed for {username} (page {page}): {error}")
+            break
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        summaries = soup.select(".person-summary")
+        if not summaries:
+            break
+
+        for summary in summaries:
+            link = summary.select_one("a.name") or summary.select_one("a.avatar")
+            if link is None:
+                continue
+            href = link.get("href", "").strip()
+            display_name = link.get_text(" ", strip=True) or None
+            if not href or "/film/" in href or "/following/" in href or "/followers/" in href:
+                continue
+            profile_username = href.strip("/").split("/")[0].lower()
+            if not profile_username:
+                continue
+            profiles[profile_username] = {
+                "username": profile_username,
+                "display_name": display_name,
+                "profile_url": urljoin(f"{LETTERBOXD_BASE_URL}/", href.lstrip("/")),
+            }
+
+        if not soup.select_one("a.next"):
+            break
+        page += 1
+        time.sleep(0.3)
+
+    return sorted(profiles.values(), key=lambda profile: profile["username"])
+
+
+def _refresh_movie_user_friends(db: Session, user: MovieUser) -> list[dict]:
+    profiles = _fetch_letterboxd_following_profiles(user.letterboxd_username)
+    if not profiles and user.username == DEFAULT_MOVIE_USERNAME:
+        profiles = _load_friend_profiles()
+
+    user.friends.clear()
+    db.flush()
+
+    for profile in profiles:
+        user.friends.append(
+            MovieUserFriend(
+                friend_username=profile["username"],
+                friend_display_name=profile.get("display_name"),
+                profile_url=profile.get("profile_url"),
+            )
+        )
+
+    db.flush()
+    return profiles
 
 
 def _slugify_title(title: str) -> str:
@@ -704,8 +857,9 @@ def _fetch_member_film_data(username: str, title: str, year: Optional[int], dire
     return {"watched": False, "personal_rating": None}
 
 
-def _find_movie_entry(db: Session, normalized_title: str, year: Optional[int]) -> Optional[MovieLetterboxdData]:
+def _find_movie_entry(db: Session, user_id: int, normalized_title: str, year: Optional[int]) -> Optional[MovieLetterboxdData]:
     query = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).filter(
+        MovieLetterboxdData.user_id == user_id,
         MovieLetterboxdData.normalized_title == normalized_title
     )
     if year is None:
@@ -900,8 +1054,13 @@ def _enrich_film_from_components(film: dict, entries_by_key: dict, entries_by_ti
     film["special_event_reason"] = "; ".join(special_event_reasons) if special_event_reasons else None
 
 
-def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
-    entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).all()
+def enrich_showings_from_db(showings: list[dict], db: Session, user: Optional[MovieUser] = None) -> list[dict]:
+    if user is None:
+        entries = []
+    else:
+        entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).filter(
+            MovieLetterboxdData.user_id == user.id
+        ).all()
     entries_by_key = {(entry.normalized_title, entry.year): entry for entry in entries}
     entries_by_title = defaultdict(list)
     for entry in entries:
@@ -913,9 +1072,14 @@ def enrich_showings_from_db(showings: list[dict], db: Session) -> list[dict]:
     return showings
 
 
-def merge_schedule_payload_with_db(payload: dict, db: Session) -> dict:
+def merge_schedule_payload_with_db(payload: dict, db: Session, user: Optional[MovieUser] = None) -> dict:
     films = payload.get("films", [])
-    entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).all()
+    if user is None:
+        entries = []
+    else:
+        entries = db.query(MovieLetterboxdData).options(selectinload(MovieLetterboxdData.friend_ratings)).filter(
+            MovieLetterboxdData.user_id == user.id
+        ).all()
     entries_by_key = {(entry.normalized_title, entry.year): entry for entry in entries}
     entries_by_title = defaultdict(list)
     for entry in entries:
@@ -979,8 +1143,8 @@ def build_schedule_payload(db: Session) -> dict:
     showings = scrape_schedule()
     _log(f"  Found {len(showings)} total showings.")
 
-    _log("🗃️ Merging stored Letterboxd data...")
-    showings = enrich_showings_from_db(showings, db)
+    _log("🗃️ Preparing base schedule payload...")
+    showings = enrich_showings_from_db(showings, db, user=None)
 
     _log("📋 Grouping by film...")
     films = group_by_film(showings)
@@ -995,6 +1159,14 @@ def get_stored_schedule_payload(db: Session, snapshot_key: str = SCHEDULE_SNAPSH
     if snapshot is None:
         return None
     return snapshot.payload
+
+
+def get_schedule_payload_for_user(db: Session, user: Optional[MovieUser]) -> dict:
+    payload = get_stored_schedule_payload(db)
+    if payload is None:
+        payload = store_schedule_payload(db, build_schedule_payload(db))
+
+    return merge_schedule_payload_with_db(json.loads(json.dumps(payload)), db, user=user)
 
 
 def store_schedule_payload(db: Session, payload: dict, snapshot_key: str = SCHEDULE_SNAPSHOT_KEY) -> dict:
@@ -1060,21 +1232,49 @@ def _collect_new_watchlist_films(schedule_payload: dict, new_watchlist_entries: 
     return matches
 
 
-def run_movie_refresh_pipeline(db: Session) -> dict:
-    sync_result = update_letterboxd_table(db)
+def _send_movie_sync_sms(user: MovieUser, sync_result: dict) -> None:
+    if not user.phone_number:
+        return
+
+    new_watchlist_films = sync_result.get("new_watchlist_films", [])
+    highlighted_titles = ", ".join(film["title"] for film in new_watchlist_films[:3]) if new_watchlist_films else "None"
+    if len(new_watchlist_films) > 3:
+        highlighted_titles = f"{highlighted_titles}, +{len(new_watchlist_films) - 3} more"
+
+    message_body = (
+        f"Movie sync finished for {user.username}.\n"
+        f"Letterboxd: {user.letterboxd_username}\n"
+        f"Updated titles: {sync_result.get('updated_movies', 0)}\n"
+        f"Skipped recent titles: {sync_result.get('skipped_movies', 0)}\n"
+        f"New watchlist matches: {len(new_watchlist_films)}\n"
+        f"Highlights: {highlighted_titles}"
+    )
+
+    try:
+        send_text_message(user.phone_number, message_body)
+    except Exception as error:
+        _log(f"  ⚠️  SMS notification failed for {user.username}: {error}")
+
+
+def run_movie_refresh_pipeline(db: Session, user: Optional[MovieUser] = None) -> dict:
+    active_user = user or get_or_create_default_movie_user(db)
+    sync_result = update_letterboxd_table(db, active_user)
     schedule_payload = build_schedule_payload(db)
     stored_schedule = store_schedule_payload(db, schedule_payload)
+    user_schedule = merge_schedule_payload_with_db(json.loads(json.dumps(stored_schedule)), db, user=active_user)
     new_watchlist_films = _collect_new_watchlist_films(
-        stored_schedule,
+        user_schedule,
         sync_result.get("new_watchlist_entries", []),
     )
 
     sync_result["schedule_updated_at"] = stored_schedule.get("updated_at")
     sync_result["new_watchlist_films"] = new_watchlist_films
+    sync_result["user"] = _serialize_movie_user(active_user)
+    _send_movie_sync_sms(active_user, sync_result)
     return sync_result
 
 
-def update_letterboxd_table(db: Session) -> dict:
+def update_letterboxd_table(db: Session, user: Optional[MovieUser] = None) -> dict:
     if not ENABLE_LETTERBOXD:
         return {
             "enabled": False,
@@ -1083,14 +1283,16 @@ def update_letterboxd_table(db: Session) -> dict:
             "new_watchlist_entries": [],
         }
 
+    active_user = user or get_or_create_default_movie_user(db)
+
     _log("🎬 Scraping Metrograph titles for Letterboxd sync...")
     showings = scrape_schedule()
     unique_films = sorted({(showing["title"], showing.get("year")) for showing in showings}, key=lambda item: (item[0], item[1] or 0))
     _log(f"  Found {len(unique_films)} unique Metrograph films to scan.")
 
     _log("  Fetching Letterboxd watchlist...")
-    watchlist = _fetch_letterboxd_watchlist(LETTERBOXD_USERNAME)
-    friend_profiles = _load_friend_profiles()
+    watchlist = _fetch_letterboxd_watchlist(active_user.letterboxd_username)
+    friend_profiles = _refresh_movie_user_friends(db, active_user)
     _log(f"  Loaded {len(friend_profiles)} friend profiles.")
 
     processed_components = set()
@@ -1112,7 +1314,7 @@ def update_letterboxd_table(db: Session) -> dict:
             processed_components.add(component_key)
             _log(f"    Component sync: {component['title']}")
 
-            entry = _find_movie_entry(db, normalized_title, year)
+            entry = _find_movie_entry(db, active_user.id, normalized_title, year)
             if _was_scanned_recently(entry):
                 skipped_movies += 1
                 _log(
@@ -1122,12 +1324,13 @@ def update_letterboxd_table(db: Session) -> dict:
 
             watchlist_path = watchlist.get(normalized_title)
             public_rating = _fetch_letterboxd_rating(component["search_title"], year, watchlist_path, director=film_director)
-            personal = _fetch_member_film_data(LETTERBOXD_USERNAME, component["search_title"], year, director=film_director)
+            personal = _fetch_member_film_data(active_user.letterboxd_username, component["search_title"], year, director=film_director)
             is_on_watchlist = normalized_title in watchlist
 
             is_new_entry = entry is None
             if entry is None:
                 entry = MovieLetterboxdData(
+                    user_id=active_user.id,
                     title=component["title"],
                     normalized_title=normalized_title,
                     year=year,
@@ -1185,5 +1388,6 @@ def update_letterboxd_table(db: Session) -> dict:
         "skipped_movies": skipped_movies,
         "friend_profiles": len(friend_profiles),
         "new_watchlist_entries": new_watchlist_entries,
-        "message": f"Updated stored Letterboxd data for {updated_movies} Metrograph films and skipped {skipped_movies} recently scanned films.",
+        "user": _serialize_movie_user(active_user),
+        "message": f"Updated stored Letterboxd data for {active_user.username}: {updated_movies} Metrograph films and skipped {skipped_movies} recently scanned films.",
     }

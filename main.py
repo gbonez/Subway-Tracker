@@ -10,7 +10,17 @@ from sqlalchemy.orm import Session
 # Import modules
 from models import get_db, init_db
 from utils.helpers import get_app_port
-from controllers.movie_controller import get_schedule, run_letterboxd_scan, run_scraper
+from controllers.movie_controller import (
+    get_schedule,
+    get_user_profile,
+    get_user_schedule,
+    login_movie_user,
+    run_letterboxd_scan,
+    run_scraper,
+    setup_movie_user,
+    sync_movie_user,
+    update_movie_user_letterboxd,
+)
 from controllers.ride_controller import (
     get_root,
     debug_url_parsing,
@@ -94,6 +104,12 @@ def register_routes(app: FastAPI):
     
     # Movie / Metrograph routes
     app.get("/movies/schedule")(get_schedule)
+    app.get("/movies/users/{username}")(get_user_profile)
+    app.get("/movies/users/{username}/schedule")(get_user_schedule)
+    app.post("/movies/users/setup")(setup_movie_user)
+    app.post("/movies/users/login")(login_movie_user)
+    app.post("/movies/users/{username}/letterboxd-sync")(sync_movie_user)
+    app.patch("/movies/users/{username}")(update_movie_user_letterboxd)
     app.post("/movies/scrape")(run_scraper)
     app.post("/movies/letterboxd-sync")(run_letterboxd_scan)
 

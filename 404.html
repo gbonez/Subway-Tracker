@@ -104,6 +104,23 @@
         <p>The page you requested does not exist.</p>
         <a href="/" class="home-link">← Return to Home</a>
     </main>
+
+    <script>
+        (function redirectMovieUserRoutes() {
+            const match = window.location.pathname.match(/^\/movies\/([^/]+)\/?$/);
+            if (!match) {
+                return;
+            }
+
+            const username = decodeURIComponent(match[1]).toLowerCase();
+            if (["setup", "login", "user"].includes(username)) {
+                return;
+            }
+
+            const target = `/movies/user/?username=${encodeURIComponent(username)}&route=${encodeURIComponent(window.location.pathname)}`;
+            window.location.replace(target);
+        })();
+    </script>
 </body>
 
 </html>

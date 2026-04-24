@@ -4,8 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Metrograph Showtimes</title>
-    <link rel="icon" type="image/x-icon" href="../forrest.ico">
+    <title>User Movie Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="/forrest.ico">
 
     <style>
         :root {
@@ -85,6 +85,11 @@
             font-size: 0.85rem;
         }
 
+        .page-subtitle {
+            color: #8e8e8e;
+            margin-top: 0.4rem;
+        }
+
         button.scrape-btn {
             background-color: var(--button-bg);
             color: var(--button-text);
@@ -105,11 +110,16 @@
             cursor: not-allowed;
         }
 
-        a.scrape-btn-link {
+        .profile-pill {
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            text-decoration: none;
+            gap: 0.45rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid #2f4a36;
+            background: rgba(76, 175, 80, 0.08);
+            color: #9fd3a6;
+            font-size: 0.82rem;
         }
 
         #scrape-status {
@@ -535,15 +545,17 @@
 
     <div class="top-bar">
         <h1><span class="gradient-text">Metrograph Showings</span> 🎬</h1>
+        <p class="page-subtitle" id="page-subtitle">Loading your movie page...</p>
         <div class="meta-row">
+            <span class="profile-pill" id="profile-pill">Loading user...</span>
             <span class="updated-at" id="updated-at">Loading...</span>
             <div class="button-row">
                 <button class="scrape-btn" id="metrograph-btn" onclick="runMetrographScrape()">↻ Refresh
                     Showings</button>
                 <button class="scrape-btn" id="letterboxd-btn" onclick="runLetterboxdSync()">★ Update Letterboxd
                     Table</button>
-                <a class="scrape-btn scrape-btn-link" href="/movies/setup/">Create Your Movie Page</a>
-                <a class="scrape-btn scrape-btn-link" href="/movies/login/">Log In</a>
+                <button class="scrape-btn" id="edit-letterboxd-btn" onclick="editLetterboxdUser()">Edit Letterboxd
+                    User</button>
             </div>
             <span id="scrape-status"></span>
         </div>
@@ -603,6 +615,31 @@
         }
 
         const API = getApiBase();
+        const urlParams = new URLSearchParams(window.location.search);
+        const routePath = urlParams.get('route');
+        if (routePath && window.location.pathname !== routePath) {
+            window.history.replaceState({}, '', routePath);
+        }
+
+        function getMovieUsername() {
+            const fromQuery = (urlParams.get('username') || '').trim().toLowerCase();
+            if (fromQuery) {
+                return fromQuery;
+            }
+
+            const match = window.location.pathname.match(/^\/movies\/([^/]+)\/?$/);
+            if (!match) {
+                return '';
+            }
+
+            const candidate = decodeURIComponent(match[1]).toLowerCase();
+            if (["setup", "login", "user"].includes(candidate)) {
+                return '';
+            }
+            return candidate;
+        }
+
+        const movieUsername = getMovieUsername();
         let allFilms = [];
         const ratingSteps = Array.from({ length: 10 }, (_, index) => (index + 1) * 0.5);
 
@@ -798,12 +835,36 @@
             return sorted;
         }
 
+        async function loadProfile() {
+            if (!movieUsername) {
+                showError('Missing movie username. Log in or create an account first.');
+                return false;
+            }
+
+            try {
+                const response = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}`);
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({}));
+                    showError(errorBody.detail || 'No user with that username exists.');
+                    return false;
+                }
+
+                const user = await response.json();
+                document.getElementById('profile-pill').textContent = `@${user.username}`;
+                document.getElementById('page-subtitle').textContent = `Letterboxd: ${user.letterboxd_username} • SMS: ${user.phone_number}`;
+                return true;
+            } catch (error) {
+                showError('Could not reach the server.');
+                return false;
+            }
+        }
+
         async function loadSchedule() {
             try {
-                const res = await fetch(`${API}/movies/schedule`);
+                const res = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}/schedule`);
                 if (!res.ok) {
                     if (res.status === 404) {
-                        showError('No schedule yet. Click "Refresh Schedule" to scrape Metrograph.');
+                        showError('No user data yet. Run the Letterboxd sync for this account.');
                     } else {
                         showError(`Failed to load schedule (${res.status}).`);
                     }
@@ -814,6 +875,7 @@
                 document.getElementById('film-list').style.display = 'flex';
                 document.getElementById('updated-at').textContent = `Last updated: ${formatUpdatedAt(data.updated_at)}`;
                 allFilms = data.films || [];
+                document.getElementById('date-filter').innerHTML = '<option value="">All dates</option>';
                 populateDateFilter();
                 renderFilms();
             } catch (e) {
@@ -999,15 +1061,8 @@
                     return;
                 }
                 const data = await res.json();
-                document.getElementById('film-list').style.display = 'flex';
-                document.getElementById('updated-at').textContent = `Last updated: ${formatUpdatedAt(data.updated_at)}`;
-                allFilms = data.films || [];
-                // Reset date filter options
-                const sel = document.getElementById('date-filter');
-                sel.innerHTML = '<option value="">All dates</option>';
-                populateDateFilter();
-                renderFilms();
-                status.textContent = `✓ Updated — ${allFilms.length} films found.`;
+                await loadSchedule();
+                status.textContent = `✓ Updated Metrograph and reloaded ${movieUsername}'s page.`;
             } catch (e) {
                 status.textContent = '';
                 showError('Could not reach the server.');
@@ -1020,11 +1075,11 @@
             const btn = document.getElementById('letterboxd-btn');
             const status = document.getElementById('scrape-status');
             btn.disabled = true;
-            status.textContent = 'Updating the stored Letterboxd table… this can take a while.';
+            status.textContent = 'Updating this user\'s stored Letterboxd table… this can take a while.';
             document.getElementById('error').style.display = 'none';
 
             try {
-                const res = await fetch(`${API}/movies/letterboxd-sync`, { method: 'POST' });
+                const res = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}/letterboxd-sync`, { method: 'POST' });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     status.textContent = '';
@@ -1034,11 +1089,52 @@
 
                 const data = await res.json();
                 status.textContent = `✓ ${data.message} Click Refresh Metrograph to apply it to the page.`;
+                await loadProfile();
             } catch (e) {
                 status.textContent = '';
                 showError('Could not reach the server.');
             } finally {
                 btn.disabled = false;
+            }
+        }
+
+        async function editLetterboxdUser() {
+            const nextLetterboxdUsername = window.prompt('Enter the new Letterboxd username for this page:');
+            if (!nextLetterboxdUsername) {
+                return;
+            }
+
+            const status = document.getElementById('scrape-status');
+            const button = document.getElementById('edit-letterboxd-btn');
+            button.disabled = true;
+            status.textContent = 'Updating Letterboxd username and refreshing this user\'s data…';
+            document.getElementById('error').style.display = 'none';
+
+            try {
+                const response = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ letterboxd_username: nextLetterboxdUsername }),
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({}));
+                    status.textContent = '';
+                    showError(errorBody.detail || `Update failed (${response.status}).`);
+                    return;
+                }
+
+                const data = await response.json();
+                status.textContent = `✓ ${data.message}`;
+                await loadProfile();
+                await loadSchedule();
+            } catch (error) {
+                status.textContent = '';
+                showError('Could not reach the server.');
+            } finally {
+                button.disabled = false;
             }
         }
 
@@ -1054,7 +1150,12 @@
             }
         });
 
-        loadSchedule();
+        (async function initializePage() {
+            const loadedProfile = await loadProfile();
+            if (loadedProfile) {
+                await loadSchedule();
+            }
+        })();
     </script>
 
 </body>
