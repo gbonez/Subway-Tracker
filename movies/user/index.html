@@ -618,6 +618,7 @@
                 <button class="scrape-btn" id="edit-letterboxd-btn" onclick="editLetterboxdUser()">Edit Letterboxd
                     User</button>
                 <button class="scrape-btn" id="edit-phone-btn" onclick="editPhoneNumber()">Edit Phone Number</button>
+                <button class="scrape-btn" id="logout-btn" onclick="logoutMovieUser()">Log Out</button>
             </div>
             <span id="scrape-status"></span>
         </div>
@@ -1272,6 +1273,10 @@
             } finally {
                 button.disabled = false;
             }
+        }
+
+        function logoutMovieUser() {
+            window.location.href = '/movies/login/';
         }
 
         document.getElementById('ratings-modal-close').addEventListener('click', closeFriendRatingsModal);

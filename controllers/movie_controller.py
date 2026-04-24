@@ -154,7 +154,7 @@ async def login_movie_user(request: MovieUserLoginRequest, db: Session = Depends
         "username": user.username,
         "letterboxd_username": user.letterboxd_username,
         "phone_number": user.phone_number,
-        "redirect_path": f"/movies/{user.username}",
+        "redirect_path": "/movies" if user.username == "grayson" else f"/movies/{user.username}",
     }
 
 
