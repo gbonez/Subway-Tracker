@@ -9,15 +9,15 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
-from threading import Lock
 from urllib.parse import quote, urljoin
 from typing import Callable, Optional
 
 import requests
 from bs4 import BeautifulSoup
+from sqlalchemy import text
 from sqlalchemy.orm import Session, selectinload
 
-from models import MovieFriendRating, MovieLetterboxdData, MovieMemberFilmCache, MovieScheduleSnapshot, MovieUser, MovieUserFriend, SessionLocal
+from models import MovieFriendRating, MovieLetterboxdData, MovieMemberFilmCache, MovieScheduleSnapshot, MovieSyncJob, MovieUser, MovieUserFriend, SessionLocal
 from services.sms_utils import send_text_message
 
 SCHEDULE_SNAPSHOT_KEY = "metrograph_schedule"
@@ -34,9 +34,7 @@ LETTERBOXD_FRIEND_USERNAMES_ENV = [
     for username in os.getenv("LETTERBOXD_FRIEND_USERNAMES", "").split(",")
     if username.strip()
 ]
-
-SYNC_JOB_LOCK = Lock()
-SYNC_JOB_STATUS: dict[str, dict] = {}
+MOVIE_SYNC_WORKER_POLL_SECONDS = float(os.getenv("MOVIE_SYNC_WORKER_POLL_SECONDS", "2"))
 
 HEADERS = {
     "User-Agent": (
@@ -77,56 +75,215 @@ def _job_status_key(username: str) -> str:
     return normalize_app_username(username)
 
 
-def initialize_sync_job(username: str, job_type: str) -> None:
-    with SYNC_JOB_LOCK:
-        SYNC_JOB_STATUS[_job_status_key(username)] = {
-            "job_type": job_type,
-            "state": "running",
-            "logs": [f"Starting {job_type} for {username}..."],
-            "redirect_path": None,
-            "error": None,
-            "completed": False,
-        }
+def _get_movie_sync_job(db: Session, username: str) -> Optional[MovieSyncJob]:
+    return db.query(MovieSyncJob).filter(MovieSyncJob.username == _job_status_key(username)).first()
+
+
+def enqueue_movie_sync_job(
+    db: Session,
+    user: MovieUser,
+    *,
+    job_type: str,
+    send_sms: bool = False,
+    sms_mode: str = "summary",
+    progress_logs: bool = True,
+    redirect_path: Optional[str] = None,
+) -> MovieSyncJob:
+    normalized_username = _job_status_key(user.username)
+    job = _get_movie_sync_job(db, normalized_username)
+    if job is not None and job.state in {"queued", "running"}:
+        raise ValueError("A Letterboxd sync is already queued or running for this user.")
+
+    if job is None:
+        job = MovieSyncJob(username=normalized_username)
+        db.add(job)
+
+    user.sync_in_progress = True
+    if job_type == "setup":
+        user.friend_sync_pending = True
+    user.updated_at = datetime.now(timezone.utc)
+
+    job.job_type = job_type
+    job.state = "queued"
+    job.logs = [f"Queued {job_type} for {normalized_username}.", "Waiting for a worker to pick up the job..."]
+    job.pending_redirect_path = redirect_path
+    job.redirect_path = None
+    job.error = None
+    job.completed = False
+    job.send_sms = send_sms
+    job.sms_mode = sms_mode
+    job.progress_logs = progress_logs
+    job.started_at = None
+    job.finished_at = None
+    job.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 def append_sync_job_log(username: str, message: str) -> None:
-    with SYNC_JOB_LOCK:
-        job = SYNC_JOB_STATUS.setdefault(
-            _job_status_key(username),
-            {"job_type": "sync", "state": "running", "logs": [], "redirect_path": None, "error": None, "completed": False},
-        )
-        job["logs"].append(message)
+    db = SessionLocal()
+    try:
+        normalized_username = _job_status_key(username)
+        job = _get_movie_sync_job(db, normalized_username)
+        if job is None:
+            job = MovieSyncJob(
+                username=normalized_username,
+                job_type="sync",
+                state="running",
+                logs=[],
+                redirect_path=None,
+                error=None,
+                completed=False,
+            )
+            db.add(job)
+
+        job.logs = [*(job.logs or []), message]
+        job.updated_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
 
 
 def finish_sync_job(username: str, redirect_path: Optional[str] = None, error: Optional[str] = None) -> None:
-    with SYNC_JOB_LOCK:
-        job = SYNC_JOB_STATUS.setdefault(
-            _job_status_key(username),
-            {"job_type": "sync", "state": "running", "logs": [], "redirect_path": None, "error": None, "completed": False},
-        )
-        job["completed"] = True
-        job["state"] = "failed" if error else "completed"
-        job["error"] = error
-        job["redirect_path"] = redirect_path
-        if error:
-            job["logs"].append(f"Sync failed: {error}")
-        else:
-            job["logs"].append("Done!")
+    db = SessionLocal()
+    try:
+        normalized_username = _job_status_key(username)
+        job = _get_movie_sync_job(db, normalized_username)
+        if job is None:
+            job = MovieSyncJob(
+                username=normalized_username,
+                job_type="sync",
+                state="running",
+                logs=[],
+                redirect_path=None,
+                error=None,
+                completed=False,
+            )
+            db.add(job)
+
+        next_logs = list(job.logs or [])
+        next_logs.append(f"Sync failed: {error}" if error else "Done!")
+        job.logs = next_logs
+        job.completed = True
+        job.state = "failed" if error else "completed"
+        job.error = error
+        job.pending_redirect_path = None
+        job.redirect_path = redirect_path
+        job.finished_at = datetime.now(timezone.utc)
+        job.updated_at = datetime.now(timezone.utc)
+        db.commit()
+    finally:
+        db.close()
 
 
 def get_sync_job_status(username: str) -> Optional[dict]:
-    with SYNC_JOB_LOCK:
-        job = SYNC_JOB_STATUS.get(_job_status_key(username))
+    db = SessionLocal()
+    try:
+        normalized_username = _job_status_key(username)
+        job = _get_movie_sync_job(db, normalized_username)
         if job is None:
             return None
         return {
-            "job_type": job.get("job_type"),
-            "state": job.get("state"),
-            "logs": list(job.get("logs", [])),
-            "redirect_path": job.get("redirect_path"),
-            "error": job.get("error"),
-            "completed": job.get("completed", False),
+            "job_type": job.job_type,
+            "state": job.state,
+            "logs": list(job.logs or []),
+            "pending_redirect_path": job.pending_redirect_path,
+            "redirect_path": job.redirect_path,
+            "error": job.error,
+            "completed": job.completed,
         }
+    finally:
+        db.close()
+
+
+def claim_next_movie_sync_job() -> Optional[dict]:
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        if db.bind.dialect.name == "postgresql":
+            row = db.execute(
+                text(
+                    """
+                    WITH next_job AS (
+                        SELECT id
+                        FROM movie_sync_jobs
+                        WHERE state = 'queued'
+                        ORDER BY updated_at ASC, id ASC
+                        FOR UPDATE SKIP LOCKED
+                        LIMIT 1
+                    )
+                    UPDATE movie_sync_jobs AS job
+                    SET state = 'running',
+                        error = NULL,
+                        completed = FALSE,
+                        attempts = COALESCE(job.attempts, 0) + 1,
+                        started_at = :now,
+                        finished_at = NULL,
+                        updated_at = :now
+                    WHERE job.id IN (SELECT id FROM next_job)
+                    RETURNING job.id, job.username, job.job_type, job.send_sms, job.sms_mode, job.progress_logs, job.pending_redirect_path
+                    """
+                ),
+                {"now": now},
+            ).mappings().first()
+            db.commit()
+            if row is None:
+                return None
+            return dict(row)
+
+        job = db.query(MovieSyncJob).filter(MovieSyncJob.state == "queued").order_by(MovieSyncJob.updated_at.asc(), MovieSyncJob.id.asc()).first()
+        if job is None:
+            return None
+
+        job.state = "running"
+        job.error = None
+        job.completed = False
+        job.attempts = (job.attempts or 0) + 1
+        job.started_at = now
+        job.finished_at = None
+        job.updated_at = now
+        db.commit()
+        return {
+            "id": job.id,
+            "username": job.username,
+            "job_type": job.job_type,
+            "send_sms": job.send_sms,
+            "sms_mode": job.sms_mode,
+            "progress_logs": job.progress_logs,
+            "pending_redirect_path": job.pending_redirect_path,
+        }
+    finally:
+        db.close()
+
+
+def process_next_movie_sync_job() -> bool:
+    job = claim_next_movie_sync_job()
+    if job is None:
+        return False
+
+    if job.get("progress_logs"):
+        append_sync_job_log(job["username"], f"Worker picked up {job['job_type']} for {job['username']}.")
+
+    try:
+        run_movie_refresh_pipeline_for_username(
+            job["username"],
+            send_sms=bool(job.get("send_sms")),
+            sms_mode=job.get("sms_mode") or "summary",
+            progress_logs=bool(job.get("progress_logs")),
+            redirect_path=job.get("pending_redirect_path"),
+        )
+    except Exception as error:
+        _log(f"⚠️  Movie sync worker failed for {job['username']}: {error}")
+    return True
+
+
+def run_movie_sync_worker(poll_seconds: float = MOVIE_SYNC_WORKER_POLL_SECONDS) -> None:
+    _log(f"🎬 Movie sync worker started with poll interval {poll_seconds} seconds")
+    while True:
+        processed_job = process_next_movie_sync_job()
+        if not processed_job:
+            time.sleep(poll_seconds)
 
 
 def _norm(value: str) -> str:

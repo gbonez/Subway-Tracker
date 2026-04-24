@@ -1,6 +1,6 @@
 """Movie route controllers — Metrograph schedule, Letterboxd sync, and SMS test tools."""
 
-from fastapi import BackgroundTasks, Depends, HTTPException
+from fastapi import Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -13,16 +13,13 @@ from services.movie_service import (
     build_schedule_payload,
     clear_movie_user_friend_data,
     create_movie_user,
-    finish_sync_job,
+    enqueue_movie_sync_job,
     get_sync_job_status,
     get_movie_user,
     get_or_create_default_movie_user,
     get_schedule_payload_for_user,
-    initialize_sync_job,
     normalize_phone_number,
     run_movie_refresh_pipeline,
-    run_movie_refresh_pipeline_for_username,
-    set_movie_user_sync_state,
     store_schedule_payload,
     update_movie_user_letterboxd_username,
     update_movie_user_phone_number,
@@ -193,15 +190,14 @@ async def run_letterboxd_scan(db: Session = Depends(get_db)):
     return JSONResponse(content=payload)
 
 
-async def setup_movie_user(request: MovieUserSetupRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def setup_movie_user(request: MovieUserSetupRequest, db: Session = Depends(get_db)):
     """Create a movie user, start their initial Letterboxd sync, and return a pollable status response."""
     try:
         user = create_movie_user(db, request.username, request.letterboxd_username, request.phone_number)
-        user = set_movie_user_sync_state(db, user, sync_in_progress=True, friend_sync_pending=True)
-        initialize_sync_job(user.username, "setup")
-        background_tasks.add_task(
-            run_movie_refresh_pipeline_for_username,
-            user.username,
+        enqueue_movie_sync_job(
+            db,
+            user,
+            job_type="setup",
             send_sms=True,
             sms_mode="setup-welcome",
             progress_logs=True,
@@ -241,7 +237,7 @@ async def login_movie_user(request: MovieUserLoginRequest, db: Session = Depends
 
 
 async def sync_movie_user(username: str, db: Session = Depends(get_db)):
-    """Run the Letterboxd refresh flow for a specific movie user."""
+    """Queue the Letterboxd refresh flow for a specific movie user."""
     user = get_movie_user(db, username)
     if user is None:
         raise HTTPException(status_code=404, detail="No user with that username exists. Sign up first.")
@@ -249,12 +245,24 @@ async def sync_movie_user(username: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="A Letterboxd sync is already running for this user.")
 
     try:
-        payload = run_movie_refresh_pipeline(db, user)
+        enqueue_movie_sync_job(
+            db,
+            user,
+            job_type="sync",
+            send_sms=False,
+            sms_mode="summary",
+            progress_logs=True,
+        )
+        payload = {
+            "username": user.username,
+            "message": "Letterboxd sync queued.",
+            "status_path": f"/movies/users/{user.username}/setup-status",
+        }
     except Exception as error:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Letterboxd sync failed: {error}") from error
 
-    return JSONResponse(content=payload)
+    return JSONResponse(status_code=202, content=payload)
 
 
 async def update_movie_user_letterboxd(username: str, request: MovieUserProfileUpdateRequest, db: Session = Depends(get_db)):

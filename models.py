@@ -93,21 +93,23 @@ def _run_movie_schema_migrations() -> None:
         inspector = inspect(connection)
         table_names = set(inspector.get_table_names())
 
-        if "movie_users" in table_names and connection.dialect.name == "postgresql":
+        if "movie_users" in table_names:
             movie_user_columns = {column["name"]: column for column in inspector.get_columns("movie_users")}
             phone_number_column = movie_user_columns.get("phone_number")
-            if phone_number_column and not phone_number_column.get("nullable", True):
+            if connection.dialect.name == "postgresql" and phone_number_column and not phone_number_column.get("nullable", True):
                 connection.execute(text("ALTER TABLE movie_users ALTER COLUMN phone_number DROP NOT NULL"))
 
             if "sync_in_progress" not in movie_user_columns:
                 connection.execute(text("ALTER TABLE movie_users ADD COLUMN sync_in_progress BOOLEAN DEFAULT FALSE"))
                 connection.execute(text("UPDATE movie_users SET sync_in_progress = FALSE WHERE sync_in_progress IS NULL"))
-                connection.execute(text("ALTER TABLE movie_users ALTER COLUMN sync_in_progress SET NOT NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_users ALTER COLUMN sync_in_progress SET NOT NULL"))
 
             if "friend_sync_pending" not in movie_user_columns:
                 connection.execute(text("ALTER TABLE movie_users ADD COLUMN friend_sync_pending BOOLEAN DEFAULT FALSE"))
                 connection.execute(text("UPDATE movie_users SET friend_sync_pending = FALSE WHERE friend_sync_pending IS NULL"))
-                connection.execute(text("ALTER TABLE movie_users ALTER COLUMN friend_sync_pending SET NOT NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_users ALTER COLUMN friend_sync_pending SET NOT NULL"))
 
         if "movie_letterboxd_data" in table_names:
             movie_columns = {column["name"]: column for column in inspector.get_columns("movie_letterboxd_data")}
@@ -137,6 +139,42 @@ def _run_movie_schema_migrations() -> None:
                             "ALTER TABLE movie_letterboxd_data ADD CONSTRAINT uq_movie_letterboxd_user_title_year UNIQUE (user_id, normalized_title, year)"
                         )
                     )
+
+        if "movie_sync_jobs" in table_names:
+            sync_job_columns = {column["name"]: column for column in inspector.get_columns("movie_sync_jobs")}
+
+            if "pending_redirect_path" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN pending_redirect_path VARCHAR"))
+
+            if "send_sms" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN send_sms BOOLEAN DEFAULT FALSE"))
+                connection.execute(text("UPDATE movie_sync_jobs SET send_sms = FALSE WHERE send_sms IS NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_sync_jobs ALTER COLUMN send_sms SET NOT NULL"))
+
+            if "sms_mode" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN sms_mode VARCHAR DEFAULT 'summary'"))
+                connection.execute(text("UPDATE movie_sync_jobs SET sms_mode = 'summary' WHERE sms_mode IS NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_sync_jobs ALTER COLUMN sms_mode SET NOT NULL"))
+
+            if "progress_logs" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN progress_logs BOOLEAN DEFAULT TRUE"))
+                connection.execute(text("UPDATE movie_sync_jobs SET progress_logs = TRUE WHERE progress_logs IS NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_sync_jobs ALTER COLUMN progress_logs SET NOT NULL"))
+
+            if "attempts" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN attempts INTEGER DEFAULT 0"))
+                connection.execute(text("UPDATE movie_sync_jobs SET attempts = 0 WHERE attempts IS NULL"))
+                if connection.dialect.name == "postgresql":
+                    connection.execute(text("ALTER TABLE movie_sync_jobs ALTER COLUMN attempts SET NOT NULL"))
+
+            if "started_at" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN started_at TIMESTAMP"))
+
+            if "finished_at" not in sync_job_columns:
+                connection.execute(text("ALTER TABLE movie_sync_jobs ADD COLUMN finished_at TIMESTAMP"))
 
 
 def init_db():
@@ -187,6 +225,28 @@ class MovieUser(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+
+
+class MovieSyncJob(Base):
+    __tablename__ = "movie_sync_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True, index=True)
+    job_type = Column(String, nullable=False, default="sync")
+    state = Column(String, nullable=False, default="queued")
+    logs = Column(JSON, nullable=False, default=list)
+    pending_redirect_path = Column(String, nullable=True)
+    redirect_path = Column(String, nullable=True)
+    error = Column(String, nullable=True)
+    completed = Column(Boolean, nullable=False, default=False)
+    send_sms = Column(Boolean, nullable=False, default=False)
+    sms_mode = Column(String, nullable=False, default="summary")
+    progress_logs = Column(Boolean, nullable=False, default=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class MovieUserFriend(Base):
