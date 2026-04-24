@@ -14,6 +14,7 @@ from controllers.movie_controller import (
     get_schedule,
     get_user_profile,
     get_user_schedule,
+    get_user_setup_status,
     login_movie_user,
     run_letterboxd_scan,
     run_scraper,
@@ -106,6 +107,7 @@ def register_routes(app: FastAPI):
     app.get("/movies/schedule")(get_schedule)
     app.get("/movies/users/{username}")(get_user_profile)
     app.get("/movies/users/{username}/schedule")(get_user_schedule)
+    app.get("/movies/users/{username}/setup-status")(get_user_setup_status)
     app.post("/movies/users/setup")(setup_movie_user)
     app.post("/movies/users/login")(login_movie_user)
     app.post("/movies/users/{username}/letterboxd-sync")(sync_movie_user)

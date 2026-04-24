@@ -90,6 +90,59 @@
             margin-top: 0.4rem;
         }
 
+        .sync-note {
+            margin-top: 0.85rem;
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            border: 1px solid #2d3b2f;
+            background: rgba(42, 56, 44, 0.22);
+            color: #b8c8ba;
+            font-size: 0.88rem;
+        }
+
+        .welcome-banner {
+            max-width: 800px;
+            margin: 0 auto 1.1rem;
+            display: none;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1rem 1.1rem;
+            border-radius: 14px;
+            border: 1px solid rgba(74, 158, 255, 0.32);
+            background: rgba(74, 158, 255, 0.12);
+        }
+
+        .welcome-banner.open {
+            display: flex;
+        }
+
+        .welcome-banner-title {
+            font-size: 0.82rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #9dcaff;
+            margin-bottom: 0.3rem;
+        }
+
+        .welcome-banner-copy {
+            color: #d8e7f8;
+            line-height: 1.5;
+            font-size: 0.92rem;
+        }
+
+        .banner-close {
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(17, 20, 24, 0.4);
+            color: #fff;
+            border-radius: 999px;
+            width: 2rem;
+            height: 2rem;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+
         button.scrape-btn {
             background-color: var(--button-bg);
             color: var(--button-text);
@@ -543,6 +596,16 @@
 
     <a href="/" class="back-home">← Return to Home</a>
 
+    <div id="welcome-banner" class="welcome-banner">
+        <div>
+            <div class="welcome-banner-title">First Sync Timing</div>
+            <div class="welcome-banner-copy">Your Letterboxd friend data sync can take a while. Even after setup
+                finishes, it may take upwards of an hour before your specific Letterboxd friend data appears alongside
+                Metrograph showtimes.</div>
+        </div>
+        <button id="welcome-banner-close" class="banner-close" type="button" aria-label="Close notice">×</button>
+    </div>
+
     <div class="top-bar">
         <h1><span class="gradient-text">Metrograph Showings</span> 🎬</h1>
         <p class="page-subtitle" id="page-subtitle">Loading your movie page...</p>
@@ -552,13 +615,14 @@
             <div class="button-row">
                 <button class="scrape-btn" id="metrograph-btn" onclick="runMetrographScrape()">↻ Refresh
                     Showings</button>
-                <button class="scrape-btn" id="letterboxd-btn" onclick="runLetterboxdSync()">★ Update Letterboxd
-                    Table</button>
                 <button class="scrape-btn" id="edit-letterboxd-btn" onclick="editLetterboxdUser()">Edit Letterboxd
                     User</button>
+                <button class="scrape-btn" id="edit-phone-btn" onclick="editPhoneNumber()">Edit Phone Number</button>
             </div>
             <span id="scrape-status"></span>
         </div>
+        <div class="sync-note">Letterboxd watch data updates every day. Friend data refreshes automatically, so manual
+            refresh is not available on this page.</div>
     </div>
 
     <div class="filter-bar">
@@ -598,6 +662,21 @@
         </div>
     </div>
 
+    <div id="notice-modal" class="modal-overlay" aria-hidden="true">
+        <div class="modal-window" role="dialog" aria-modal="true" aria-labelledby="notice-modal-title">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-kicker">Letterboxd Update</div>
+                    <div id="notice-modal-title" class="modal-title">Friend data update scheduled</div>
+                    <div id="notice-modal-subtitle" class="modal-subtitle">Your Letterboxd friend data will update
+                        within 24 hours.</div>
+                </div>
+                <button id="notice-modal-close" class="modal-close" type="button"
+                    aria-label="Close update notice">×</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function getApiBase() {
             const isLocalStaticPage = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
@@ -616,6 +695,7 @@
 
         const API = getApiBase();
         const urlParams = new URLSearchParams(window.location.search);
+        const welcomeBanner = document.getElementById('welcome-banner');
         const routePath = urlParams.get('route');
         if (routePath && window.location.pathname !== routePath) {
             window.history.replaceState({}, '', routePath);
@@ -648,6 +728,30 @@
         const ratingsModalSubtitle = document.getElementById('ratings-modal-subtitle');
         const ratingsModalSummary = document.getElementById('ratings-modal-summary');
         const ratingsModalChart = document.getElementById('ratings-modal-chart');
+        const noticeModal = document.getElementById('notice-modal');
+
+        function updateQueryParam(key, value) {
+            const nextUrl = new URL(window.location.href);
+            if (!value) {
+                nextUrl.searchParams.delete(key);
+            } else {
+                nextUrl.searchParams.set(key, value);
+            }
+            window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+        }
+
+        function openNoticeModal(message) {
+            document.getElementById('notice-modal-subtitle').textContent = message;
+            noticeModal.classList.add('open');
+            noticeModal.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeNoticeModal() {
+            noticeModal.classList.remove('open');
+            noticeModal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        }
 
         function formatRatingLabel(value) {
             return value.toFixed(1);
@@ -851,7 +955,10 @@
 
                 const user = await response.json();
                 document.getElementById('profile-pill').textContent = `@${user.username}`;
-                document.getElementById('page-subtitle').textContent = `Letterboxd: ${user.letterboxd_username} • SMS: ${user.phone_number}`;
+                document.getElementById('page-subtitle').textContent = `Letterboxd: ${user.letterboxd_username} • SMS: ${user.phone_number || 'Not set'}${user.sync_in_progress ? ' • Sync in progress' : ''}${user.friend_sync_pending ? ' • Friend refresh pending' : ''}`;
+                const editLetterboxdButton = document.getElementById('edit-letterboxd-btn');
+                editLetterboxdButton.disabled = Boolean(user.sync_in_progress);
+                editLetterboxdButton.title = user.sync_in_progress ? 'A Letterboxd sync is currently running for this user.' : '';
                 return true;
             } catch (error) {
                 showError('Could not reach the server.');
@@ -1071,34 +1178,11 @@
             }
         }
 
-        async function runLetterboxdSync() {
-            const btn = document.getElementById('letterboxd-btn');
-            const status = document.getElementById('scrape-status');
-            btn.disabled = true;
-            status.textContent = 'Updating this user\'s stored Letterboxd table… this can take a while.';
-            document.getElementById('error').style.display = 'none';
-
-            try {
-                const res = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}/letterboxd-sync`, { method: 'POST' });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    status.textContent = '';
-                    showError(`Letterboxd sync failed: ${err.detail || res.status}`);
-                    return;
-                }
-
-                const data = await res.json();
-                status.textContent = `✓ ${data.message} Click Refresh Metrograph to apply it to the page.`;
-                await loadProfile();
-            } catch (e) {
-                status.textContent = '';
-                showError('Could not reach the server.');
-            } finally {
-                btn.disabled = false;
-            }
-        }
-
         async function editLetterboxdUser() {
+            if (document.getElementById('edit-letterboxd-btn').disabled) {
+                return;
+            }
+
             const nextLetterboxdUsername = window.prompt('Enter the new Letterboxd username for this page:');
             if (!nextLetterboxdUsername) {
                 return;
@@ -1130,6 +1214,48 @@
                 status.textContent = `✓ ${data.message}`;
                 await loadProfile();
                 await loadSchedule();
+                if (data.show_friend_sync_popup) {
+                    openNoticeModal('Your Letterboxd friend data will update within 24 hours. Existing friend ratings were cleared until that refresh completes.');
+                }
+            } catch (error) {
+                status.textContent = '';
+                showError('Could not reach the server.');
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function editPhoneNumber() {
+            const nextPhoneNumber = window.prompt('Enter a phone number like +15555555555. Leave it blank to remove SMS notifications.', '');
+            if (nextPhoneNumber === null) {
+                return;
+            }
+
+            const status = document.getElementById('scrape-status');
+            const button = document.getElementById('edit-phone-btn');
+            button.disabled = true;
+            status.textContent = 'Updating phone number…';
+            document.getElementById('error').style.display = 'none';
+
+            try {
+                const response = await fetch(`${API}/movies/users/${encodeURIComponent(movieUsername)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ phone_number: nextPhoneNumber }),
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json().catch(() => ({}));
+                    status.textContent = '';
+                    showError(errorBody.detail || `Update failed (${response.status}).`);
+                    return;
+                }
+
+                const data = await response.json();
+                status.textContent = `✓ ${data.message}`;
+                await loadProfile();
             } catch (error) {
                 status.textContent = '';
                 showError('Could not reach the server.');
@@ -1139,18 +1265,34 @@
         }
 
         document.getElementById('ratings-modal-close').addEventListener('click', closeFriendRatingsModal);
+        document.getElementById('notice-modal-close').addEventListener('click', closeNoticeModal);
+        document.getElementById('welcome-banner-close').addEventListener('click', () => {
+            welcomeBanner.classList.remove('open');
+            updateQueryParam('welcome', '');
+        });
         ratingsModal.addEventListener('click', (event) => {
             if (event.target === ratingsModal) {
                 closeFriendRatingsModal();
+            }
+        });
+        noticeModal.addEventListener('click', (event) => {
+            if (event.target === noticeModal) {
+                closeNoticeModal();
             }
         });
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && ratingsModal.classList.contains('open')) {
                 closeFriendRatingsModal();
             }
+            if (event.key === 'Escape' && noticeModal.classList.contains('open')) {
+                closeNoticeModal();
+            }
         });
 
         (async function initializePage() {
+            if (urlParams.get('welcome') === '1') {
+                welcomeBanner.classList.add('open');
+            }
             const loadedProfile = await loadProfile();
             if (loadedProfile) {
                 await loadSchedule();

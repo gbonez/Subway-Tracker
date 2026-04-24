@@ -162,6 +162,35 @@
         #error a {
             color: #fff;
         }
+
+        #logs-panel {
+            display: none;
+            margin-top: 1rem;
+            border: 1px solid #2d3f31;
+            border-radius: 12px;
+            background: rgba(16, 24, 18, 0.94);
+            overflow: hidden;
+        }
+
+        .logs-header {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #263529;
+            color: #9fd3a6;
+            font-size: 0.82rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        #logs-output {
+            margin: 0;
+            padding: 1rem;
+            min-height: 180px;
+            max-height: 320px;
+            overflow-y: auto;
+            font: 0.84rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            color: #d9e6db;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 
@@ -189,8 +218,9 @@
 
                 <label>
                     Phone number
-                    <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+15555555555" required>
-                    <span class="hint">Stored as +1xxxxxxxxxx for SMS notifications.</span>
+                    <input id="phone_number" name="phone_number" inputmode="tel" placeholder="+15555555555">
+                    <span class="hint">For SMS updates when movies you want to see are playing. Leave empty to opt
+                        out.</span>
                 </label>
 
                 <div class="actions">
@@ -201,6 +231,10 @@
 
             <p id="status"></p>
             <div id="error"></div>
+            <div id="logs-panel">
+                <div class="logs-header">Setup Logs</div>
+                <pre id="logs-output"></pre>
+            </div>
         </section>
     </main>
 
@@ -225,10 +259,55 @@
         const errorEl = document.getElementById('error');
         const statusEl = document.getElementById('status');
         const submitBtn = document.getElementById('submit-btn');
+        const logsPanel = document.getElementById('logs-panel');
+        const logsOutput = document.getElementById('logs-output');
+        let setupStatusPoll = null;
 
         function showError(message) {
             errorEl.innerHTML = message;
             errorEl.style.display = 'block';
+        }
+
+        function renderLogs(logs) {
+            logsPanel.style.display = 'block';
+            logsOutput.textContent = (logs || []).join('\n');
+            logsOutput.scrollTop = logsOutput.scrollHeight;
+        }
+
+        async function pollSetupStatus(username) {
+            try {
+                const response = await fetch(`${API}/movies/users/${encodeURIComponent(username)}/setup-status`);
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Could not load setup status.');
+                }
+
+                if (data.job && Array.isArray(data.job.logs)) {
+                    renderLogs(data.job.logs);
+                }
+
+                if (data.job?.state === 'failed') {
+                    clearInterval(setupStatusPoll);
+                    setupStatusPoll = null;
+                    submitBtn.disabled = false;
+                    statusEl.textContent = '';
+                    showError(data.job.error || 'Setup failed.');
+                    return;
+                }
+
+                if (data.job?.completed && data.job?.redirect_path) {
+                    clearInterval(setupStatusPoll);
+                    setupStatusPoll = null;
+                    statusEl.textContent = 'Friend sync complete. Redirecting to your movie page...';
+                    window.location.href = data.job.redirect_path;
+                }
+            } catch (error) {
+                clearInterval(setupStatusPoll);
+                setupStatusPoll = null;
+                submitBtn.disabled = false;
+                statusEl.textContent = '';
+                showError(error.message || 'Could not reach the server.');
+            }
         }
 
         form.addEventListener('submit', async (event) => {
@@ -260,13 +339,18 @@
                     return;
                 }
 
-                statusEl.textContent = 'Account created. Redirecting to your movie page...';
-                window.location.href = data.redirect_path || `/movies/${payload.username}`;
+                statusEl.textContent = 'Account created. Finding your Letterboxd friends and storing their data...';
+                renderLogs(['Setup accepted.', 'Waiting for friend discovery to start...']);
+                if (setupStatusPoll) {
+                    clearInterval(setupStatusPoll);
+                }
+                await pollSetupStatus(data.username || payload.username);
+                setupStatusPoll = setInterval(() => {
+                    pollSetupStatus(data.username || payload.username);
+                }, 2000);
             } catch (error) {
                 statusEl.textContent = '';
                 showError('Could not reach the server.');
-            } finally {
-                submitBtn.disabled = false;
             }
         });
     </script>
