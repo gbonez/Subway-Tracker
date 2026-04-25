@@ -1607,6 +1607,11 @@ def build_schedule_payload(db: Session) -> dict:
     showings = scrape_schedule()
     _log(f"  Found {len(showings)} total showings.")
 
+    return build_schedule_payload_from_showings(showings, db)
+
+
+def build_schedule_payload_from_showings(showings: list[dict], db: Session) -> dict:
+
     _log("🗃️ Preparing base schedule payload...")
     showings = enrich_showings_from_db(showings, db, user=None)
 
@@ -1831,6 +1836,8 @@ def run_movie_refresh_pipeline(
     send_sms: bool = False,
     sms_mode: str = "summary",
     progress_callback: Optional[Callable[[str], None]] = None,
+    showings: Optional[list[dict]] = None,
+    stored_schedule_payload: Optional[dict] = None,
 ) -> dict:
     active_user = user or get_or_create_default_movie_user(db)
     if progress_callback is not None:
@@ -1839,9 +1846,12 @@ def run_movie_refresh_pipeline(
     active_user = set_movie_user_sync_state(db, active_user, sync_in_progress=True)
 
     try:
-        sync_result = update_letterboxd_table(db, active_user, progress_callback=progress_callback)
-        schedule_payload = build_schedule_payload(db)
-        stored_schedule = store_schedule_payload(db, schedule_payload)
+        sync_result = update_letterboxd_table(db, active_user, progress_callback=progress_callback, showings=showings)
+        if stored_schedule_payload is None:
+            schedule_payload = build_schedule_payload_from_showings(showings, db) if showings is not None else build_schedule_payload(db)
+            stored_schedule = store_schedule_payload(db, schedule_payload)
+        else:
+            stored_schedule = stored_schedule_payload
         user_schedule = merge_schedule_payload_with_db(json.loads(json.dumps(stored_schedule)), db, user=active_user)
         new_watchlist_films = _collect_new_watchlist_films(
             user_schedule,
@@ -1871,6 +1881,7 @@ def update_letterboxd_table(
     user: Optional[MovieUser] = None,
     *,
     progress_callback: Optional[Callable[[str], None]] = None,
+    showings: Optional[list[dict]] = None,
 ) -> dict:
     if not ENABLE_LETTERBOXD:
         return {
@@ -1890,7 +1901,8 @@ def update_letterboxd_table(
         progress_callback("Scraping Metrograph titles for this account.")
 
     _log("🎬 Scraping Metrograph titles for Letterboxd sync...")
-    showings = scrape_schedule()
+    if showings is None:
+        showings = scrape_schedule()
     unique_films = sorted({(showing["title"], showing.get("year")) for showing in showings}, key=lambda item: (item[0], item[1] or 0))
     _log(f"  Found {len(unique_films)} unique Metrograph films to scan.")
     if progress_callback is not None:
@@ -2046,6 +2058,45 @@ def run_nightly_movie_refreshes() -> list[dict]:
                     "schedule_updated_at": result.get("schedule_updated_at"),
                 }
             )
+        return results
+    finally:
+        db.close()
+
+
+def run_daily_movie_user_update_cycle() -> list[dict]:
+    results = []
+    db = SessionLocal()
+    try:
+        users = list_movie_users(db)
+        if not users:
+            users = [get_or_create_default_movie_user(db)]
+
+        _log("🎬 Running one Metrograph calendar scrape for the daily user update cycle...")
+        showings = scrape_schedule()
+        _log(f"  Found {len(showings)} total showings for the shared daily run.")
+        stored_schedule = store_schedule_payload(db, build_schedule_payload_from_showings(showings, db))
+
+        for user in users:
+            _log(f"📨 Running daily movie update for {user.username}")
+            result = run_movie_refresh_pipeline(
+                db,
+                user,
+                send_sms=True,
+                sms_mode="summary",
+                showings=showings,
+                stored_schedule_payload=stored_schedule,
+            )
+            results.append(
+                {
+                    "username": user.username,
+                    "updated_movies": result.get("updated_movies", 0),
+                    "friend_profiles": result.get("friend_profiles", 0),
+                    "schedule_updated_at": result.get("schedule_updated_at"),
+                    "new_watchlist_films": len(result.get("new_watchlist_films", [])),
+                    "text_sent": bool(result.get("new_watchlist_films")),
+                }
+            )
+
         return results
     finally:
         db.close()
