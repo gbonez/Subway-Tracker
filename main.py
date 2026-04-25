@@ -16,6 +16,7 @@ from controllers.movie_controller import (
     get_user_schedule,
     get_user_setup_status,
     login_movie_user,
+    run_daily_movie_refresh,
     run_letterboxd_scan,
     run_scraper,
     send_movie_custom_text,
@@ -117,6 +118,7 @@ def register_routes(app: FastAPI):
     app.post("/movies/text/send")(send_movie_test_text)
     app.post("/movies/text/send-custom")(send_movie_custom_text)
     app.post("/movies/scrape")(run_scraper)
+    app.post("/movies/daily-refresh")(run_daily_movie_refresh)
     app.post("/movies/letterboxd-sync")(run_letterboxd_scan)
 
     # Utility routes

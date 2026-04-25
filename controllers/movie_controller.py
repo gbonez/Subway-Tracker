@@ -20,6 +20,7 @@ from services.movie_service import (
     get_or_create_default_movie_user,
     get_schedule_payload_for_user,
     normalize_phone_number,
+    run_daily_movie_user_update_cycle,
     run_movie_refresh_pipeline,
     store_schedule_payload,
     update_movie_user_letterboxd_username,
@@ -196,6 +197,21 @@ async def run_letterboxd_scan(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Letterboxd scan failed: {error}") from error
 
     return JSONResponse(content=payload)
+
+
+async def run_daily_movie_refresh():
+    """Run the shared daily Metrograph update cycle for all movie users."""
+    try:
+        results = run_daily_movie_user_update_cycle()
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Daily movie refresh failed: {error}") from error
+
+    summary = {
+        "users_processed": len(results),
+        "texts_sent": sum(1 for result in results if result.get("text_sent")),
+        "users_with_new_watchlist_films": sum(1 for result in results if result.get("new_watchlist_films", 0) > 0),
+    }
+    return JSONResponse(content={"results": results, "summary": summary})
 
 
 async def setup_movie_user(request: MovieUserSetupRequest, db: Session = Depends(get_db)):
