@@ -1743,6 +1743,51 @@ def _collect_calendar_update_films(schedule_payload: dict) -> list[dict]:
     return matches
 
 
+def _film_calendar_key(film: dict) -> tuple:
+    return (
+        (film.get("title") or "").strip().lower(),
+        (film.get("director") or "").strip().lower(),
+        film.get("year"),
+    )
+
+
+def _collect_new_calendar_watchlist_films(previous_schedule_payload: Optional[dict], current_schedule_payload: dict) -> list[dict]:
+    previous_keys = {
+        _film_calendar_key(film)
+        for film in (previous_schedule_payload or {}).get("films", [])
+    }
+
+    matches = []
+    seen_titles = set()
+    for film in current_schedule_payload.get("films", []):
+        if not film.get("on_watchlist"):
+            continue
+        if _film_calendar_key(film) in previous_keys:
+            continue
+
+        dedupe_key = (film.get("title"), film.get("director"))
+        if dedupe_key in seen_titles:
+            continue
+        seen_titles.add(dedupe_key)
+
+        matches.append(
+            {
+                "title": film.get("title"),
+                "director": film.get("director") or "Unknown Director",
+                "special_event": film.get("special_event", False),
+                "showtime_dates": sorted(
+                    {
+                        showing.get("date")
+                        for showing in film.get("showings", [])
+                        if showing.get("date")
+                    }
+                ),
+            }
+        )
+
+    return matches
+
+
 def _build_movie_calendar_update_message(user: MovieUser, sync_result: dict) -> str:
     schedule_updated_at = sync_result.get("schedule_updated_at") or datetime.now(timezone.utc).isoformat()
     update_label = _format_mmdd(schedule_updated_at)
@@ -1771,7 +1816,11 @@ def _build_movie_calendar_update_message(user: MovieUser, sync_result: dict) -> 
 
 
 def build_movie_calendar_update_message_for_user(db: Session, user: MovieUser) -> str:
-    schedule_payload = get_schedule_payload_for_user(db, user)
+    schedule_payload = get_stored_schedule_payload(db)
+    if schedule_payload is None:
+        raise ValueError("No stored Metrograph schedule is available yet. Run a calendar update first.")
+
+    schedule_payload = merge_schedule_payload_with_db(json.loads(json.dumps(schedule_payload)), db, user=user)
     films = _collect_calendar_update_films(schedule_payload)
     if not films:
         raise ValueError("No movies from this user's Letterboxd watchlist are currently on the Metrograph schedule.")
@@ -1838,6 +1887,7 @@ def run_movie_refresh_pipeline(
     progress_callback: Optional[Callable[[str], None]] = None,
     showings: Optional[list[dict]] = None,
     stored_schedule_payload: Optional[dict] = None,
+    previous_schedule_payload: Optional[dict] = None,
 ) -> dict:
     active_user = user or get_or_create_default_movie_user(db)
     if progress_callback is not None:
@@ -1853,10 +1903,13 @@ def run_movie_refresh_pipeline(
         else:
             stored_schedule = stored_schedule_payload
         user_schedule = merge_schedule_payload_with_db(json.loads(json.dumps(stored_schedule)), db, user=active_user)
-        new_watchlist_films = _collect_new_watchlist_films(
-            user_schedule,
-            sync_result.get("new_watchlist_entries", []),
-        )
+        if previous_schedule_payload is not None:
+            new_watchlist_films = _collect_new_calendar_watchlist_films(previous_schedule_payload, user_schedule)
+        else:
+            new_watchlist_films = _collect_new_watchlist_films(
+                user_schedule,
+                sync_result.get("new_watchlist_entries", []),
+            )
 
         sync_result["schedule_updated_at"] = stored_schedule.get("updated_at")
         sync_result["new_watchlist_films"] = new_watchlist_films
@@ -2072,6 +2125,7 @@ def run_daily_movie_user_update_cycle() -> list[dict]:
             users = [get_or_create_default_movie_user(db)]
 
         _log("🎬 Running one Metrograph calendar scrape for the daily user update cycle...")
+        previous_schedule = get_stored_schedule_payload(db)
         showings = scrape_schedule()
         _log(f"  Found {len(showings)} total showings for the shared daily run.")
         stored_schedule = store_schedule_payload(db, build_schedule_payload_from_showings(showings, db))
@@ -2085,6 +2139,7 @@ def run_daily_movie_user_update_cycle() -> list[dict]:
                 sms_mode="summary",
                 showings=showings,
                 stored_schedule_payload=stored_schedule,
+                previous_schedule_payload=previous_schedule,
             )
             results.append(
                 {
