@@ -1690,10 +1690,94 @@ def _collect_new_watchlist_films(schedule_payload: dict, new_watchlist_entries: 
                 "title": film.get("title"),
                 "director": film.get("director") or "Unknown Director",
                 "special_event": film.get("special_event", False),
+                "showtime_dates": sorted(
+                    {
+                        showing.get("date")
+                        for showing in film.get("showings", [])
+                        if showing.get("date")
+                    }
+                ),
             }
         )
 
     return matches
+
+
+def _format_mmdd(value: str) -> str:
+    try:
+        return datetime.fromisoformat(value).strftime("%m/%d")
+    except ValueError:
+        return value
+
+
+def _collect_calendar_update_films(schedule_payload: dict) -> list[dict]:
+    matches = []
+    seen_titles = set()
+    for film in schedule_payload.get("films", []):
+        if not film.get("on_watchlist"):
+            continue
+
+        dedupe_key = (film.get("title"), film.get("director"))
+        if dedupe_key in seen_titles:
+            continue
+        seen_titles.add(dedupe_key)
+
+        matches.append(
+            {
+                "title": film.get("title"),
+                "showtime_dates": sorted(
+                    {
+                        showing.get("date")
+                        for showing in film.get("showings", [])
+                        if showing.get("date")
+                    }
+                ),
+            }
+        )
+
+    return matches
+
+
+def _build_movie_calendar_update_message(user: MovieUser, sync_result: dict) -> str:
+    schedule_updated_at = sync_result.get("schedule_updated_at") or datetime.now(timezone.utc).isoformat()
+    update_label = _format_mmdd(schedule_updated_at)
+    new_watchlist_films = sync_result.get("new_watchlist_films", [])
+
+    lines = [
+        f"🎬Metrograph Calendar Update🎬 for {update_label}",
+        "",
+        "New movies from your Letterboxd watchlist added to the Metrograph schedule:",
+        "",
+    ]
+
+    for index, film in enumerate(new_watchlist_films[:5], start=1):
+        showtime_dates = ", ".join(_format_mmdd(show_date) for show_date in film.get("showtime_dates", [])[:5]) or "Unknown"
+        lines.append(f"{index}. {film['title']} - Showtimes: {showtime_dates}")
+
+    lines.extend(
+        [
+            "",
+            f"Visit gbonez dot org slash movies slash {user.username} to view the full calendar!",
+            "",
+            "(Will update this text to include the proper url when my phone number get verified lol sorry)",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def build_movie_calendar_update_message_for_user(db: Session, user: MovieUser) -> str:
+    schedule_payload = get_schedule_payload_for_user(db, user)
+    films = _collect_calendar_update_films(schedule_payload)
+    if not films:
+        raise ValueError("No movies from this user's Letterboxd watchlist are currently on the Metrograph schedule.")
+
+    return _build_movie_calendar_update_message(
+        user,
+        {
+            "schedule_updated_at": schedule_payload.get("updated_at"),
+            "new_watchlist_films": films,
+        },
+    )
 
 
 def _send_movie_sync_sms(user: MovieUser, sync_result: dict) -> None:
@@ -1701,18 +1785,11 @@ def _send_movie_sync_sms(user: MovieUser, sync_result: dict) -> None:
         return
 
     new_watchlist_films = sync_result.get("new_watchlist_films", [])
-    highlighted_titles = ", ".join(film["title"] for film in new_watchlist_films[:3]) if new_watchlist_films else "None"
-    if len(new_watchlist_films) > 3:
-        highlighted_titles = f"{highlighted_titles}, +{len(new_watchlist_films) - 3} more"
+    if not new_watchlist_films:
+        _log(f"No new watchlist matches for {user.username}; skipping sync SMS.")
+        return
 
-    message_body = (
-        f"Movie sync finished for {user.username}.\n"
-        f"Letterboxd: {user.letterboxd_username}\n"
-        f"Updated titles: {sync_result.get('updated_movies', 0)}\n"
-        f"Skipped recent titles: {sync_result.get('skipped_movies', 0)}\n"
-        f"New watchlist matches: {len(new_watchlist_films)}\n"
-        f"Highlights: {highlighted_titles}"
-    )
+    message_body = _build_movie_calendar_update_message(user, sync_result)
 
     try:
         send_text_message(user.phone_number, message_body)
@@ -1737,18 +1814,14 @@ def build_movie_setup_welcome_message(username: str, watchlist_films: Optional[l
 
 
 def _send_movie_setup_welcome_sms(user: MovieUser, sync_result: Optional[dict] = None) -> None:
-    if not user.phone_number:
-        return
-
     message_body = build_movie_setup_welcome_message(
         user.username,
         sync_result.get("new_watchlist_films", []) if sync_result else None,
     )
+    _log(f"Setup welcome message for {user.username}: {message_body}")
 
-    try:
-        send_text_message(user.phone_number, message_body)
-    except Exception as error:
-        _log(f"  ⚠️  Setup welcome SMS failed for {user.username}: {error}")
+    if sync_result is not None:
+        _send_movie_sync_sms(user, sync_result)
 
 
 def run_movie_refresh_pipeline(

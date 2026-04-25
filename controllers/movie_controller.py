@@ -9,6 +9,7 @@ from typing import Optional
 from models import get_db
 from services.sms_utils import send_text_message
 from services.movie_service import (
+    build_movie_calendar_update_message_for_user,
     build_movie_setup_welcome_message,
     build_schedule_payload,
     clear_movie_user_friend_data,
@@ -89,6 +90,13 @@ async def send_movie_custom_text(request: MovieTextSendRequest, db: Session = De
             raise HTTPException(status_code=400, detail="Enter a website username for the setup welcome text.")
         try:
             message_body = build_movie_setup_welcome_message(setup_username)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+    elif message_kind == "calendar-update":
+        if movie_user is None:
+            raise HTTPException(status_code=400, detail="Calendar update texts must target a website username with a saved phone number.")
+        try:
+            message_body = build_movie_calendar_update_message_for_user(db, movie_user)
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
     elif message_kind == "custom":
@@ -249,7 +257,7 @@ async def sync_movie_user(username: str, db: Session = Depends(get_db)):
             db,
             user,
             job_type="sync",
-            send_sms=False,
+            send_sms=True,
             sms_mode="summary",
             progress_logs=True,
         )
