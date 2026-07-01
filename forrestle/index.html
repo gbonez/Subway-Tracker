@@ -736,6 +736,7 @@
         let curLetters = [];   // letters typed in current row
         let gameOver = false;
         let validating = false;
+        let submitting = false;
         let results = [];   // [{word, colors}] for each submitted row
 
         // ─────────────────────────────────────────────
@@ -813,7 +814,7 @@
         });
 
         function handleKey(key) {
-            if (gameOver || validating) return;
+            if (gameOver || validating || submitting) return;
 
             if (key === '⌫') {
                 if (curCol > 0) {
@@ -908,6 +909,7 @@
                 return;
             }
 
+            submitting = true;
             const colors = evaluate(guess);
 
             // Flip tiles one by one
@@ -940,6 +942,7 @@
                 curRow++;
                 curCol = 0;
                 curLetters = [];
+                submitting = false;
 
                 const won = colors.every(c => c === 'correct');
 
