@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forrestle</title>
+    <link rel="icon" type="image/x-icon" href="../forrest.ico">
+
+    <style>
+        :root {
+            --bg: #121213;
+            --tone-1: #ffffff;
+            --tone-2: #818384;
+            --tone-3: #565758;
+            --tone-4: #3a3a3c;
+            --tone-5: #272729;
+            --tone-6: #1a1a1b;
+            --correct: #538d4e;
+            --present: #b59f3b;
+            --absent: #3a3a3c;
+            --key-bg: #818384;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--tone-1);
+            font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* ── Header ── */
+        header {
+            width: 100%;
+            height: 50px;
+            border-bottom: 1px solid var(--tone-4);
+            background: var(--tone-6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 0.18rem;
+            text-transform: uppercase;
+        }
+
+        /* ── Toast message (top) ── */
+        #msg-bar {
+            height: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 0.4rem;
+        }
+
+        #msg {
+            background: var(--tone-1);
+            color: var(--bg);
+            padding: 0.4rem 1rem;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s;
+        }
+
+        #msg.show {
+            opacity: 1;
+        }
+
+        /* ── Board ── */
+        #board-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 0;
+        }
+
+        #board {
+            display: grid;
+            grid-template-rows: repeat(6, 1fr);
+            gap: 5px;
+            /* 7 tiles × ~52px + 6 gaps × 5px = 364 + 30 = 394px */
+            width: min(394px, 92vw);
+            height: min(345px, 80vw);
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+        }
+
+        .tile {
+            border: 2px solid var(--tone-4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(0.9rem, 3.5vw, 1.4rem);
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--tone-1);
+            background: transparent;
+            user-select: none;
+        }
+
+        .tile.filled {
+            border-color: var(--tone-2);
+        }
+
+        .tile[data-state="correct"] {
+            background: var(--correct);
+            border-color: var(--correct);
+            color: #fff;
+        }
+
+        .tile[data-state="present"] {
+            background: var(--present);
+            border-color: var(--present);
+            color: #fff;
+        }
+
+        .tile[data-state="absent"] {
+            background: var(--absent);
+            border-color: var(--absent);
+            color: #fff;
+        }
+
+        /* ── Animations ── */
+        @keyframes pop {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.12);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        @keyframes flip-down {
+            0% {
+                transform: rotateX(0deg);
+            }
+
+            50% {
+                transform: rotateX(-90deg);
+            }
+
+            100% {
+                transform: rotateX(0deg);
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            20%,
+            60% {
+                transform: translateX(-5px);
+            }
+
+            40%,
+            80% {
+                transform: translateX(5px);
+            }
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            40% {
+                transform: translateY(-12px);
+            }
+
+            60% {
+                transform: translateY(-6px);
+            }
+        }
+
+        .tile.pop {
+            animation: pop 0.1s ease-in-out;
+        }
+
+        .tile.flip {
+            animation: flip-down 0.5s ease forwards;
+        }
+
+        .tile.bounce {
+            animation: bounce 0.4s ease;
+        }
+
+        .row.shake {
+            animation: shake 0.5s ease;
+        }
+
+        /* ── Keyboard ── */
+        #keyboard {
+            padding: 0 0.5rem 1.25rem;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .key-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .key {
+            height: 56px;
+            min-width: 40px;
+            padding: 0 6px;
+            border-radius: 4px;
+            background: var(--key-bg);
+            color: var(--tone-1);
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+
+        .key.wide {
+            min-width: 62px;
+            font-size: 0.7rem;
+        }
+
+        .key[data-state="correct"] {
+            background: var(--correct);
+        }
+
+        .key[data-state="present"] {
+            background: var(--present);
+        }
+
+        .key[data-state="absent"] {
+            background: var(--tone-4);
+        }
+
+        /* ── End overlay ── */
+        #overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.72);
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #overlay.show {
+            display: flex;
+        }
+
+        #card {
+            background: var(--tone-6);
+            border: 1px solid var(--tone-4);
+            border-radius: 8px;
+            padding: 2rem 1.75rem;
+            max-width: 340px;
+            width: 90%;
+            text-align: center;
+        }
+
+        #card h2 {
+            font-size: 1.3rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12rem;
+            margin-bottom: 0.35rem;
+        }
+
+        #card .sub {
+            font-size: 0.95rem;
+            color: var(--tone-2);
+            margin-bottom: 0.2rem;
+        }
+
+        #card .tomorrow {
+            font-size: 0.78rem;
+            color: var(--tone-3);
+            margin-bottom: 1.5rem;
+        }
+
+        #share-btn {
+            background: var(--correct);
+            color: #fff;
+            border: none;
+            padding: 0.8rem 0;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        #share-btn:hover {
+            background: #65a860;
+        }
+
+        #close-btn {
+            margin-top: 0.7rem;
+            background: transparent;
+            color: var(--tone-2);
+            border: 1px solid var(--tone-3);
+            padding: 0.5rem 0;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            width: 100%;
+            transition: color 0.2s, border-color 0.2s;
+        }
+
+        #close-btn:hover {
+            color: var(--tone-1);
+            border-color: var(--tone-2);
+        }
+
+        /* ── Clipboard toast ── */
+        #clip-toast {
+            position: fixed;
+            top: 64px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--tone-1);
+            color: var(--bg);
+            padding: 0.5rem 1.2rem;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 0.88rem;
+            z-index: 20;
+            opacity: 0;
+            pointer-events: none;
+            white-space: nowrap;
+            transition: opacity 0.25s;
+        }
+
+        #clip-toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Forrestle</h1>
+    </header>
+
+    <div id="msg-bar">
+        <div id="msg"></div>
+    </div>
+
+    <div id="board-wrap">
+        <div id="board"></div>
+    </div>
+
+    <div id="keyboard">
+        <div class="key-row" id="kr0"></div>
+        <div class="key-row" id="kr1"></div>
+        <div class="key-row" id="kr2"></div>
+    </div>
+
+    <!-- End-of-game overlay -->
+    <div id="overlay">
+        <div id="card">
+            <h2 id="card-title"></h2>
+            <p class="sub" id="card-sub"></p>
+            <p class="tomorrow" id="card-tomorrow"></p>
+            <button id="share-btn">&#128279; Share</button>
+            <button id="close-btn">Close</button>
+        </div>
+    </div>
+
+    <div id="clip-toast">Copied to clipboard!</div>
+
+    <script>
+        // ─────────────────────────────────────────────
+        // Constants
+        // ─────────────────────────────────────────────
+        const ANSWER = 'FORREST';
+        const WORD_LEN = 7;
+        const MAX_ROWS = 6;
+        const STORE_KEY = 'forrestle_v1';
+        const WIN_MSGS = ['Genius!', 'Magnificent!', 'Impressive!', 'Splendid!', 'Great!', 'Phew!'];
+        const KB_ROWS = [
+            ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+            ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+            ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫'],
+        ];
+        const PRIORITY = { correct: 3, present: 2, absent: 1 };
+
+        // ─────────────────────────────────────────────
+        // Build board
+        // ─────────────────────────────────────────────
+        const boardEl = document.getElementById('board');
+        const tiles = [];   // tiles[row][col]
+
+        for (let r = 0; r < MAX_ROWS; r++) {
+            const rowEl = document.createElement('div');
+            rowEl.classList.add('row');
+            rowEl.id = `row-${r}`;
+            const rowTiles = [];
+            for (let c = 0; c < WORD_LEN; c++) {
+                const t = document.createElement('div');
+                t.classList.add('tile');
+                rowEl.appendChild(t);
+                rowTiles.push(t);
+            }
+            boardEl.appendChild(rowEl);
+            tiles.push(rowTiles);
+        }
+
+        // ─────────────────────────────────────────────
+        // Build keyboard
+        // ─────────────────────────────────────────────
+        const keyEls = {};
+
+        KB_ROWS.forEach((keys, i) => {
+            const rowEl = document.getElementById(`kr${i}`);
+            keys.forEach(k => {
+                const btn = document.createElement('button');
+                btn.classList.add('key');
+                btn.textContent = k;
+                btn.dataset.key = k;
+                if (k === 'ENTER' || k === '⌫') btn.classList.add('wide');
+                btn.addEventListener('click', () => handleKey(k));
+                rowEl.appendChild(btn);
+                keyEls[k] = btn;
+            });
+        });
+
+        // ─────────────────────────────────────────────
+        // Game state
+        // ─────────────────────────────────────────────
+        let curRow = 0;
+        let curCol = 0;
+        let curLetters = [];   // letters typed in current row
+        let gameOver = false;
+        let results = [];   // [{word, colors}] for each submitted row
+
+        // ─────────────────────────────────────────────
+        // Persistence helpers
+        // ─────────────────────────────────────────────
+        function todayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function saveState() {
+            const payload = { date: todayStr(), results, curRow, gameOver };
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(payload)); } catch (_) { }
+        }
+
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORE_KEY);
+                if (!raw) return null;
+                const s = JSON.parse(raw);
+                return s.date === todayStr() ? s : null;
+            } catch (_) { return null; }
+        }
+
+        // ─────────────────────────────────────────────
+        // Restore saved state
+        // ─────────────────────────────────────────────
+        function restoreUI(state) {
+            results = state.results;
+            curRow = state.curRow;
+            gameOver = state.gameOver;
+
+            // Fill board tiles
+            results.forEach((res, r) => {
+                res.word.split('').forEach((letter, c) => {
+                    tiles[r][c].textContent = letter;
+                    tiles[r][c].dataset.state = res.colors[c];
+                    tiles[r][c].classList.add('filled');
+                });
+            });
+
+            // Restore keyboard key colors
+            applyKeyStates(results);
+
+            if (gameOver) setTimeout(showOverlay, 350);
+        }
+
+        function applyKeyStates(resArr) {
+            const map = {};
+            resArr.forEach(res => {
+                res.word.split('').forEach((letter, c) => {
+                    const color = res.colors[c];
+                    if (!map[letter] || PRIORITY[color] > PRIORITY[map[letter]]) {
+                        map[letter] = color;
+                    }
+                });
+            });
+            Object.entries(map).forEach(([letter, state]) => {
+                if (keyEls[letter]) keyEls[letter].dataset.state = state;
+            });
+        }
+
+        const saved = loadState();
+        if (saved) restoreUI(saved);
+
+        // ─────────────────────────────────────────────
+        // Input handling
+        // ─────────────────────────────────────────────
+        document.addEventListener('keydown', e => {
+            if (gameOver) return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (e.key === 'Enter') handleKey('ENTER');
+            else if (e.key === 'Backspace') handleKey('⌫');
+            else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+        });
+
+        function handleKey(key) {
+            if (gameOver) return;
+
+            if (key === '⌫') {
+                if (curCol > 0) {
+                    curCol--;
+                    curLetters.pop();
+                    const t = tiles[curRow][curCol];
+                    t.textContent = '';
+                    t.classList.remove('filled', 'pop');
+                }
+            } else if (key === 'ENTER') {
+                submitRow();
+            } else if (/^[A-Z]$/.test(key) && curCol < WORD_LEN) {
+                const t = tiles[curRow][curCol];
+                t.textContent = key;
+                t.classList.add('filled');
+                // pop animation
+                t.classList.remove('pop');
+                void t.offsetWidth; // reflow
+                t.classList.add('pop');
+                curLetters.push(key);
+                curCol++;
+            }
+        }
+
+        // ─────────────────────────────────────────────
+        // Wordle evaluation (handles duplicate letters)
+        // ─────────────────────────────────────────────
+        function evaluate(guess) {
+            const answer = ANSWER.split('');
+            const guessArr = guess.split('');
+            const colors = Array(WORD_LEN).fill('absent');
+            const pool = [...answer];   // mutable copy for second pass
+
+            // Pass 1 – exact matches (green)
+            guessArr.forEach((l, i) => {
+                if (l === pool[i]) {
+                    colors[i] = 'correct';
+                    pool[i] = null;
+                }
+            });
+
+            // Pass 2 – wrong position (yellow)
+            guessArr.forEach((l, i) => {
+                if (colors[i] === 'correct') return;
+                const idx = pool.indexOf(l);
+                if (idx !== -1) {
+                    colors[i] = 'present';
+                    pool[idx] = null;
+                }
+            });
+
+            return colors;
+        }
+
+        // ─────────────────────────────────────────────
+        // Submit row
+        // ─────────────────────────────────────────────
+        function submitRow() {
+            if (curCol < WORD_LEN) {
+                showMsg('Not enough letters');
+                shakeRow(curRow);
+                return;
+            }
+
+            const guess = curLetters.join('');
+            const colors = evaluate(guess);
+
+            // Flip tiles one by one
+            const FLIP_STEP = 100;  // ms between each tile flip start
+            const FLIP_DUR = 500;  // ms for full flip animation
+
+            colors.forEach((color, c) => {
+                setTimeout(() => {
+                    const t = tiles[curRow][c];
+                    t.classList.add('flip');
+                    // Apply colour at the halfway point of the flip
+                    setTimeout(() => { t.dataset.state = color; }, FLIP_DUR / 2);
+                }, c * FLIP_STEP);
+            });
+
+            const resolveAt = WORD_LEN * FLIP_STEP + FLIP_DUR;
+
+            setTimeout(() => {
+                // Update keyboard
+                colors.forEach((color, c) => {
+                    const letter = guess[c];
+                    const btn = keyEls[letter];
+                    if (btn) {
+                        const cur = btn.dataset.state;
+                        if (!cur || PRIORITY[color] > PRIORITY[cur]) btn.dataset.state = color;
+                    }
+                });
+
+                results.push({ word: guess, colors });
+                curRow++;
+                curCol = 0;
+                curLetters = [];
+
+                const won = colors.every(c => c === 'correct');
+
+                if (won) {
+                    gameOver = true;
+                    // Bounce winning tiles
+                    tiles[curRow - 1].forEach((t, i) => {
+                        setTimeout(() => {
+                            t.classList.remove('flip');
+                            void t.offsetWidth;
+                            t.classList.add('bounce');
+                        }, i * 80);
+                    });
+                    showMsg(WIN_MSGS[curRow - 1] ?? 'Nice!');
+                    saveState();
+                    setTimeout(showOverlay, 1800);
+                } else if (curRow >= MAX_ROWS) {
+                    gameOver = true;
+                    showMsg(ANSWER, 3500);
+                    saveState();
+                    setTimeout(showOverlay, 2200);
+                } else {
+                    saveState();
+                }
+            }, resolveAt);
+        }
+
+        // ─────────────────────────────────────────────
+        // UI helpers
+        // ─────────────────────────────────────────────
+        function shakeRow(r) {
+            const el = document.getElementById(`row-${r}`);
+            el.classList.remove('shake');
+            void el.offsetWidth;
+            el.classList.add('shake');
+            el.addEventListener('animationend', () => el.classList.remove('shake'), { once: true });
+        }
+
+        let msgTimer;
+        function showMsg(text, ms = 1600) {
+            const el = document.getElementById('msg');
+            clearTimeout(msgTimer);
+            el.textContent = text;
+            el.classList.add('show');
+            if (ms > 0) msgTimer = setTimeout(() => el.classList.remove('show'), ms);
+        }
+
+        // ─────────────────────────────────────────────
+        // End overlay
+        // ─────────────────────────────────────────────
+        function showOverlay() {
+            const won = results.length > 0 &&
+                results[results.length - 1].colors.every(c => c === 'correct');
+
+            document.getElementById('card-title').textContent =
+                won ? (results.length === 1 ? 'Genius!' : `${results.length} / 6`) : 'The answer was...';
+
+            document.getElementById('card-sub').textContent =
+                won ? `You got FORREST in ${results.length}!` : ANSWER;
+
+            document.getElementById('card-tomorrow').textContent = 'Come back tomorrow for a new game!';
+
+            document.getElementById('overlay').classList.add('show');
+        }
+
+        document.getElementById('close-btn').addEventListener('click', () => {
+            document.getElementById('overlay').classList.remove('show');
+        });
+
+        // ─────────────────────────────────────────────
+        // Share
+        // ─────────────────────────────────────────────
+        document.getElementById('share-btn').addEventListener('click', shareResult);
+
+        function buildShareText() {
+            const d = new Date();
+            const dateLabel = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+            const won = results.length > 0 &&
+                results[results.length - 1].colors.every(c => c === 'correct');
+            const score = won ? `${results.length}/6` : 'X/6';
+            const emoji = { correct: '🟩', present: '🟨', absent: '⬛' };
+            const grid = results.map(r => r.colors.map(c => emoji[c]).join('')).join('\n');
+
+            return `Forrestle ${dateLabel} ${score}\n\n${grid}\n\nwww.gbonez.com/forrestle`;
+        }
+
+        function shareResult() {
+            const text = buildShareText();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => flashToast('Copied to clipboard!'))
+                    .catch(() => fallbackCopy(text));
+            } else {
+                fallbackCopy(text);
+            }
+        }
+
+        function fallbackCopy(text) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            try { document.execCommand('copy'); } catch (_) { }
+            document.body.removeChild(ta);
+            flashToast('Copied to clipboard!');
+        }
+
+        let toastTimer;
+        function flashToast(msg) {
+            const el = document.getElementById('clip-toast');
+            clearTimeout(toastTimer);
+            el.textContent = msg;
+            el.classList.add('show');
+            toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+        }
+    </script>
+</body>
+
+</html>
