@@ -57,6 +57,17 @@
             text-transform: uppercase;
         }
 
+        /* ── Subtitle ── */
+        #subtitle {
+            font-size: 0.78rem;
+            color: var(--tone-3);
+            text-align: center;
+            padding: 0.4rem 1.25rem;
+            border-bottom: 1px solid var(--tone-5);
+            width: 100%;
+            letter-spacing: 0.01rem;
+        }
+
         /* ── Toast message (top) ── */
         #msg-bar {
             height: 2rem;
@@ -353,6 +364,65 @@
             border-color: var(--tone-2);
         }
 
+        /* ── Stats bar chart ── */
+        #stats-section {
+            margin: 0.65rem 0 1rem;
+        }
+
+        #stats-section h3 {
+            font-size: 0.62rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1rem;
+            color: var(--tone-2);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            width: 14px;
+            text-align: right;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--tone-2);
+            flex-shrink: 0;
+        }
+
+        .stat-bar-wrap {
+            flex: 1;
+            height: 22px;
+        }
+
+        .stat-bar {
+            height: 100%;
+            min-width: 22px;
+            background: var(--tone-4);
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 7px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--tone-1);
+            box-sizing: border-box;
+            transition: width 0.5s ease;
+        }
+
+        .stat-bar.highlight {
+            background: var(--correct);
+        }
+
+        .stat-bar.highlight-loss {
+            background: #9e3434;
+        }
+
         /* ── Clipboard toast ── */
         #clip-toast {
             position: fixed;
@@ -375,6 +445,152 @@
         #clip-toast.show {
             opacity: 1;
         }
+
+        /* ── Mobile: narrow screens ── */
+        @media (max-width: 480px) {
+            header {
+                height: 44px;
+            }
+
+            header h1 {
+                font-size: 1.15rem;
+                letter-spacing: 0.12rem;
+            }
+
+            #subtitle {
+                font-size: 0.7rem;
+                padding: 0.3rem 0.9rem;
+            }
+
+            #msg-bar {
+                height: 1.75rem;
+                margin-top: 0.2rem;
+            }
+
+            #msg {
+                font-size: 0.78rem;
+                padding: 0.3rem 0.8rem;
+            }
+
+            #board-wrap {
+                padding: 0.4rem 0;
+            }
+
+            #board {
+                gap: 4px;
+            }
+
+            .row {
+                gap: 4px;
+            }
+
+            #keyboard {
+                padding: 0 0.25rem 0.75rem;
+                max-width: 100%;
+            }
+
+            .key-row {
+                gap: 4px;
+                margin-bottom: 4px;
+            }
+
+            .key {
+                height: 46px;
+                min-width: 32px;
+                padding: 0 3px;
+                font-size: 0.7rem;
+            }
+
+            .key.wide {
+                min-width: 50px;
+                font-size: 0.62rem;
+            }
+
+            #card {
+                padding: 1.25rem 1.1rem;
+                max-width: 96vw;
+            }
+
+            #card h2 {
+                font-size: 1.1rem;
+            }
+
+            #card .sub {
+                font-size: 0.88rem;
+            }
+        }
+
+        /* ── Mobile: very narrow (iPhone SE 1st-gen, 320 px) ── */
+        @media (max-width: 360px) {
+            .key {
+                height: 42px;
+                min-width: 26px;
+                font-size: 0.65rem;
+            }
+
+            .key.wide {
+                min-width: 44px;
+                font-size: 0.58rem;
+            }
+
+            .key-row {
+                gap: 3px;
+            }
+
+            #keyboard {
+                padding: 0 0.15rem 0.6rem;
+            }
+        }
+
+        /* ── Short screens / landscape mobile ── */
+        @media (max-height: 680px) {
+            header {
+                height: 40px;
+            }
+
+            header h1 {
+                font-size: 1.1rem;
+            }
+
+            #subtitle {
+                padding: 0.2rem 0.9rem;
+                font-size: 0.68rem;
+            }
+
+            #msg-bar {
+                height: 1.5rem;
+                margin-top: 0.1rem;
+            }
+
+            #board-wrap {
+                padding: 0.25rem 0;
+            }
+
+            .key {
+                height: 40px;
+            }
+
+            #stats-section {
+                margin: 0.4rem 0 0.5rem;
+            }
+
+            .stat-bar-wrap {
+                height: 18px;
+            }
+
+            #card {
+                padding: 0.9rem 1.1rem;
+            }
+
+            #card h2 {
+                font-size: 1rem;
+                margin-bottom: 0.2rem;
+            }
+
+            #card .tomorrow {
+                margin-bottom: 0.75rem;
+            }
+        }
     </style>
 </head>
 
@@ -382,6 +598,9 @@
     <header>
         <h1>Forrestle</h1>
     </header>
+
+    <div id="subtitle">A Wordle where the answer never changes. Figure out which word&nbsp;&mdash;&nbsp;and you&rsquo;re
+        in on the joke.</div>
 
     <div id="msg-bar">
         <div id="msg"></div>
@@ -402,6 +621,7 @@
         <div id="card">
             <h2 id="card-title"></h2>
             <p class="sub" id="card-sub"></p>
+            <div id="stats-section"></div>
             <p class="tomorrow" id="card-tomorrow"></p>
             <button id="share-btn">&#128279; Share</button>
             <button id="close-btn">Close</button>
@@ -418,13 +638,48 @@
         const WORD_LEN = 7;
         const MAX_ROWS = 6;
         const STORE_KEY = 'forrestle_v1';
-        const WIN_MSGS = ['Genius!', 'Magnificent!', 'Impressive!', 'Splendid!', 'Great!', 'Phew!'];
+        const WIN_MSGS = ['Rumptastic!', 'Rumpalicious!', 'Forrest would be impressed!', 'Splendid!', 'Great!', 'Phew!'];
         const KB_ROWS = [
             ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
             ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
             ['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '⌫'],
         ];
         const PRIORITY = { correct: 3, present: 2, absent: 1 };
+        const STATS_KEY = 'forrestle_stats_v1';
+        const WORD_WHITELIST = new Set(['FORREST']);
+        const LOSE_MSGS = [
+            'Really? Six whole tries?',
+            "Yikes. That one's on you.",
+            "We'll just pretend this didn't happen.",
+            'Not your most rumpalicious moment.',
+            'Come on, seriously?',
+            'Six guesses. Still nothing. Wow.',
+        ];
+
+        // ─────────────────────────────────────────────
+        // Stats storage (accumulates across all games)
+        // ─────────────────────────────────────────────
+        function loadStats() {
+            try {
+                const raw = localStorage.getItem(STATS_KEY);
+                if (!raw) return { dist: [0, 0, 0, 0, 0, 0], losses: 0 };
+                const s = JSON.parse(raw);
+                if (!Array.isArray(s.dist) || s.dist.length !== 6) s.dist = [0, 0, 0, 0, 0, 0];
+                if (typeof s.losses !== 'number') s.losses = 0;
+                return s;
+            } catch (_) { return { dist: [0, 0, 0, 0, 0, 0], losses: 0 }; }
+        }
+
+        function recordResult(guessCount) {
+            // guessCount = 1-6 for a win, 0 for a loss
+            const stats = loadStats();
+            if (guessCount >= 1 && guessCount <= 6) {
+                stats.dist[guessCount - 1]++;
+            } else {
+                stats.losses++;
+            }
+            try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch (_) { }
+        }
 
         // ─────────────────────────────────────────────
         // Build board
@@ -473,6 +728,7 @@
         let curCol = 0;
         let curLetters = [];   // letters typed in current row
         let gameOver = false;
+        let validating = false;
         let results = [];   // [{word, colors}] for each submitted row
 
         // ─────────────────────────────────────────────
@@ -550,7 +806,7 @@
         });
 
         function handleKey(key) {
-            if (gameOver) return;
+            if (gameOver || validating) return;
 
             if (key === '⌫') {
                 if (curCol > 0) {
@@ -606,9 +862,25 @@
         }
 
         // ─────────────────────────────────────────────
+        // Word validation
+        // ─────────────────────────────────────────────
+        async function isValidWord(word) {
+            if (WORD_WHITELIST.has(word)) return true;
+            try {
+                const res = await fetch(
+                    `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`,
+                    { signal: AbortSignal.timeout(3000) }
+                );
+                return res.ok;
+            } catch (_) {
+                return true; // fail-open: allow word through if API is unreachable
+            }
+        }
+
+        // ─────────────────────────────────────────────
         // Submit row
         // ─────────────────────────────────────────────
-        function submitRow() {
+        async function submitRow() {
             if (curCol < WORD_LEN) {
                 showMsg('Not enough letters');
                 shakeRow(curRow);
@@ -616,6 +888,19 @@
             }
 
             const guess = curLetters.join('');
+
+            // Validate against dictionary API (FORREST is whitelisted)
+            validating = true;
+            showMsg('Checking…', 0);
+            const valid = await isValidWord(guess);
+            validating = false;
+            document.getElementById('msg').classList.remove('show');
+            if (!valid) {
+                showMsg('Not a valid word');
+                shakeRow(curRow);
+                return;
+            }
+
             const colors = evaluate(guess);
 
             // Flip tiles one by one
@@ -662,11 +947,13 @@
                         }, i * 80);
                     });
                     showMsg(WIN_MSGS[curRow - 1] ?? 'Nice!');
+                    recordResult(curRow); // curRow already incremented = number of guesses
                     saveState();
                     setTimeout(showOverlay, 1800);
                 } else if (curRow >= MAX_ROWS) {
                     gameOver = true;
-                    showMsg(ANSWER, 3500);
+                    showMsg('So close... or not.', 2500);
+                    recordResult(0);
                     saveState();
                     setTimeout(showOverlay, 2200);
                 } else {
@@ -699,18 +986,71 @@
         // End overlay
         // ─────────────────────────────────────────────
         function showOverlay() {
-            const won = results.length > 0 &&
-                results[results.length - 1].colors.every(c => c === 'correct');
+            const lastResult = results[results.length - 1];
+            const won = lastResult && lastResult.colors.every(c => c === 'correct');
 
-            document.getElementById('card-title').textContent =
-                won ? (results.length === 1 ? 'Genius!' : `${results.length} / 6`) : 'The answer was...';
+            if (won) {
+                document.getElementById('card-title').textContent =
+                    results.length === 1 ? 'Genius!' : `Got it in ${results.length}!`;
+                document.getElementById('card-sub').textContent =
+                    `You got FORREST in ${results.length} ${results.length === 1 ? 'try' : 'tries'}.`;
+            } else {
+                document.getElementById('card-title').textContent =
+                    LOSE_MSGS[Math.floor(Math.random() * LOSE_MSGS.length)];
+                document.getElementById('card-sub').textContent =
+                    'The answer was painfully obvious. Think harder next time.';
+            }
 
-            document.getElementById('card-sub').textContent =
-                won ? `You got FORREST in ${results.length}!` : ANSWER;
+            document.getElementById('card-tomorrow').textContent =
+                'Your scores are saved across every game.';
 
-            document.getElementById('card-tomorrow').textContent = 'Come back tomorrow for a new game!';
+            renderStats(won ? results.length : 0);
 
             document.getElementById('overlay').classList.add('show');
+        }
+
+        function renderStats(highlightGuess) {
+            // highlightGuess = 1-6 if won this game, 0 if lost
+            const stats = loadStats();
+            const section = document.getElementById('stats-section');
+            section.innerHTML = '<h3>Guess Distribution</h3>';
+
+            const maxVal = Math.max(...stats.dist, stats.losses, 1);
+
+            for (let i = 1; i <= 6; i++) {
+                const count = stats.dist[i - 1];
+                const barPct = Math.max(8, Math.round((count / maxVal) * 100));
+                appendStatRow(section, String(i), count, barPct,
+                    highlightGuess === i ? 'highlight' : '');
+            }
+
+            // X row — losses
+            const lCount = stats.losses;
+            const lPct = Math.max(8, Math.round((lCount / maxVal) * 100));
+            appendStatRow(section, 'X', lCount, lPct,
+                highlightGuess === 0 ? 'highlight-loss' : '');
+        }
+
+        function appendStatRow(parent, label, count, pct, extraClass) {
+            const rowEl = document.createElement('div');
+            rowEl.className = 'stat-row';
+
+            const labelEl = document.createElement('span');
+            labelEl.className = 'stat-label';
+            labelEl.textContent = label;
+
+            const wrapEl = document.createElement('div');
+            wrapEl.className = 'stat-bar-wrap';
+
+            const barEl = document.createElement('div');
+            barEl.className = ('stat-bar' + (extraClass ? ' ' + extraClass : '')).trim();
+            barEl.style.width = `${pct}%`;
+            barEl.textContent = String(count);
+
+            wrapEl.appendChild(barEl);
+            rowEl.appendChild(labelEl);
+            rowEl.appendChild(wrapEl);
+            parent.appendChild(rowEl);
         }
 
         document.getElementById('close-btn').addEventListener('click', () => {
@@ -731,7 +1071,7 @@
             const emoji = { correct: '🟩', present: '🟨', absent: '⬛' };
             const grid = results.map(r => r.colors.map(c => emoji[c]).join('')).join('\n');
 
-            return `Forrestle ${dateLabel} ${score}\n\n${grid}\n\nwww.gbonez.com/forrestle`;
+            return `Forrestle ${dateLabel}\n\n${score}\n\n${grid}\n\nwww.gbonez.org/forrestle`;
         }
 
         function shareResult() {
